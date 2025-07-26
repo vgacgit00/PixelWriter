@@ -1,0 +1,36 @@
+# Makefile for Pixel-Based Visual RAM System (SDL2)
+
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -g
+LIBS = -lSDL2
+
+# Targets
+TARGETS = pixel_main
+
+# Default target
+all: $(TARGETS)
+
+# Main pixel program
+pixel_main: pixel_main.c pixel_visual_ram.h
+	$(CC) $(CFLAGS) -o $@ pixel_main.c $(LIBS)
+
+# Test and run
+test: pixel_main
+	@echo "=== Testing Pixel-Based Visual RAM System ==="
+	./pixel_main
+
+# Clean
+clean:
+	rm -f $(TARGETS)
+
+# Help
+help:
+	@echo "Pixel Visual RAM System - Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all     - Build pixel visual RAM program"
+	@echo "  test    - Build and run pixel tests"
+	@echo "  clean   - Remove build files"
+	@echo "  help    - Show this help"
+
+.PHONY: all clean test help

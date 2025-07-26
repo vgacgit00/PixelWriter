@@ -2,6 +2,7 @@ modules = ["c"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["SDL2"]
 
 [workflows]
 runButton = "Project"
@@ -19,6 +20,10 @@ args = "Visual RAM System"
 task = "workflow.run"
 args = "visual_ram_demo"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Demo Interactive"
+
 [[workflows.workflow]]
 name = "Visual RAM System"
 author = "agent"
@@ -34,3 +39,11 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "sudo apt-get update && sudo apt-get install -y libsdl2-dev && make clean && make all && ./demo"
+
+[[workflows.workflow]]
+name = "Demo Interactive"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make all && ./demo"
