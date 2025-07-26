@@ -1,0 +1,25 @@
+# Makefile for Text-Based Visual RAM System (sans SDL2)
+
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -g
+
+# Targets
+TARGETS = simple_main
+
+# Default target
+all: $(TARGETS)
+
+# Main program
+simple_main: simple_main.c visual_ram_simple.h
+        $(CC) $(CFLAGS) -o $@ simple_main.c
+
+# Test and run
+test: simple_main
+        @echo "=== Testing Text-Based Visual RAM System ==="
+        ./simple_main
+
+# Clean
+clean:
+        rm -f $(TARGETS)
+
+.PHONY: all clean test
