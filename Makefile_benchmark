@@ -1,0 +1,225 @@
+
+# Makefile pour Benchmark Détaillé RAM vs VisualMem
+# ==================================================
+
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -O2
+DEBUG_FLAGS = -g -DDEBUG
+LDFLAGS = -lm
+
+# Fichiers sources
+BENCHMARK_SRC = benchmark_detailed.c
+LIBVISUALMEM_SRC = libvisualmem.c
+LIBVISUALMEM_HDR = libvisualmem.h
+
+# Cibles de compilation
+BENCHMARK_TARGET = benchmark_detailed
+LIB_STATIC = libvisualmem.a
+LIB_SHARED = libvisualmem.so
+
+# Objets
+BENCHMARK_OBJ = benchmark_detailed.o
+LIBVISUALMEM_OBJ = libvisualmem.o
+
+# === TARGETS PRINCIPAUX ===
+
+.PHONY: all clean benchmark test install
+
+all: $(BENCHMARK_TARGET)
+
+# Benchmark détaillé
+$(BENCHMARK_TARGET): $(BENCHMARK_OBJ) $(LIB_STATIC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compilation objets
+$(BENCHMARK_OBJ): $(BENCHMARK_SRC) $(LIBVISUALMEM_HDR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(LIBVISUALMEM_OBJ): $(LIBVISUALMEM_SRC) $(LIBVISUALMEM_HDR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Bibliothèque statique
+$(LIB_STATIC): $(LIBVISUALMEM_OBJ)
+	ar rcs $@ $^
+
+# Bibliothèque partagée
+$(LIB_SHARED): $(LIBVISUALMEM_OBJ)
+	$(CC) -shared -fPIC -o $@ $^
+
+# === EXECUTION ===
+
+benchmark: $(BENCHMARK_TARGET)
+	@echo "=== LANCEMENT BENCHMARK DÉTAILLÉ ==="
+	@echo "Comparaison RAM vs Visual Memory..."
+	@echo ""
+	./$(BENCHMARK_TARGET)
+
+benchmark-fast: $(BENCHMARK_TARGET)
+	@echo "=== BENCHMARK RAPIDE ==="
+	@echo "Version accélérée du benchmark..."
+	@echo ""
+	./$(BENCHMARK_TARGET) --fast
+
+benchmark-full: $(BENCHMARK_TARGET)
+	@echo "=== BENCHMARK COMPLET ==="
+	@echo "Analyse exhaustive avec tous les patterns..."
+	@echo ""
+	./$(BENCHMARK_TARGET) --full
+
+# === DEBUG ===
+
+debug: CFLAGS += $(DEBUG_FLAGS)
+debug: $(BENCHMARK_TARGET)
+	@echo "Version debug compilée avec symboles"
+
+debug-run: debug
+	@echo "=== BENCHMARK DEBUG ==="
+	gdb ./$(BENCHMARK_TARGET)
+
+# === ANALYSE ===
+
+analyze: $(BENCHMARK_TARGET)
+	@echo "=== ANALYSE STATIQUE ==="
+	cppcheck --enable=all $(BENCHMARK_SRC) $(LIBVISUALMEM_SRC)
+
+profile: CFLAGS += -pg
+profile: $(BENCHMARK_TARGET)
+	@echo "=== PROFILING ==="
+	./$(BENCHMARK_TARGET)
+	gprof $(BENCHMARK_TARGET) gmon.out > profile_results.txt
+	@echo "Résultats profiling dans profile_results.txt"
+
+# === TESTS ===
+
+test: $(BENCHMARK_TARGET)
+	@echo "=== TESTS BENCHMARK ==="
+	@echo "Test 1: Benchmark micro (64B)"
+	./$(BENCHMARK_TARGET) --size=64 --iterations=100
+	@echo ""
+	@echo "Test 2: Benchmark petit (1KB)"
+	./$(BENCHMARK_TARGET) --size=1024 --iterations=50
+	@echo ""
+	@echo "Test 3: Vérification intégrité"
+	./$(BENCHMARK_TARGET) --integrity-only
+
+validate: $(BENCHMARK_TARGET)
+	@echo "=== VALIDATION COMPLÈTE ==="
+	@echo "Validation exhaustive du système de benchmark..."
+	./$(BENCHMARK_TARGET) --validate
+
+# === INSTALLATION ===
+
+install: $(BENCHMARK_TARGET) $(LIB_STATIC) $(LIB_SHARED)
+	@echo "=== INSTALLATION ==="
+	sudo cp $(BENCHMARK_TARGET) /usr/local/bin/
+	sudo cp $(LIB_STATIC) /usr/local/lib/
+	sudo cp $(LIB_SHARED) /usr/local/lib/
+	sudo cp $(LIBVISUALMEM_HDR) /usr/local/include/
+	sudo ldconfig
+	@echo "Installation complète dans /usr/local/"
+
+uninstall:
+	@echo "=== DÉSINSTALLATION ==="
+	sudo rm -f /usr/local/bin/$(BENCHMARK_TARGET)
+	sudo rm -f /usr/local/lib/$(LIB_STATIC)
+	sudo rm -f /usr/local/lib/$(LIB_SHARED)
+	sudo rm -f /usr/local/include/$(LIBVISUALMEM_HDR)
+	sudo ldconfig
+
+# === UTILITAIRES ===
+
+clean:
+	@echo "=== NETTOYAGE ==="
+	rm -f *.o
+	rm -f $(BENCHMARK_TARGET)
+	rm -f $(LIB_STATIC) $(LIB_SHARED)
+	rm -f gmon.out profile_results.txt
+	rm -f *.log *.tmp
+	@echo "Nettoyage terminé"
+
+help:
+	@echo "=== AIDE MAKEFILE BENCHMARK ==="
+	@echo ""
+	@echo "Targets disponibles:"
+	@echo "  all              - Compile le benchmark détaillé"
+	@echo "  benchmark        - Lance le benchmark complet"
+	@echo "  benchmark-fast   - Lance le benchmark rapide"
+	@echo "  benchmark-full   - Lance le benchmark exhaustif"
+	@echo "  test             - Tests unitaires du benchmark"
+	@echo "  validate         - Validation complète"
+	@echo "  debug            - Compile version debug"
+	@echo "  debug-run        - Lance en mode debug (gdb)"
+	@echo "  analyze          - Analyse statique du code"
+	@echo "  profile          - Profiling de performance"
+	@echo "  install          - Installation système"
+	@echo "  uninstall        - Désinstallation"
+	@echo "  clean            - Nettoyage fichiers temporaires"
+	@echo "  help             - Affiche cette aide"
+	@echo ""
+	@echo "Exemples d'usage:"
+	@echo "  make benchmark              # Benchmark standard"
+	@echo "  make benchmark-fast         # Version rapide"
+	@echo "  make test                   # Tests unitaires"
+	@echo "  make debug-run              # Debug avec gdb"
+
+# === INFORMATIONS ===
+
+info:
+	@echo "=== INFORMATIONS BENCHMARK ==="
+	@echo "Compilateur: $(CC)"
+	@echo "Flags: $(CFLAGS)"
+	@echo "Version LibVisualMem: 1.0.0"
+	@echo "Fichiers sources:"
+	@echo "  - $(BENCHMARK_SRC)"
+	@echo "  - $(LIBVISUALMEM_SRC)"
+	@echo "Targets générés:"
+	@echo "  - $(BENCHMARK_TARGET)"
+	@echo "  - $(LIB_STATIC)"
+	@echo "  - $(LIB_SHARED)"
+
+# === MÉTA-TARGETS ===
+
+# Compilation complète avec tests
+full-build: clean all test validate
+	@echo "=== BUILD COMPLET TERMINÉ ==="
+
+# Package pour distribution
+package: clean all
+	@echo "=== CRÉATION PACKAGE ==="
+	mkdir -p visualmem-benchmark-1.0.0
+	cp $(BENCHMARK_SRC) $(LIBVISUALMEM_SRC) $(LIBVISUALMEM_HDR) visualmem-benchmark-1.0.0/
+	cp Makefile_benchmark visualmem-benchmark-1.0.0/Makefile
+	cp README.md VISUAL_MEMORY_COMPLETE.md visualmem-benchmark-1.0.0/
+	tar czf visualmem-benchmark-1.0.0.tar.gz visualmem-benchmark-1.0.0/
+	rm -rf visualmem-benchmark-1.0.0/
+	@echo "Package créé: visualmem-benchmark-1.0.0.tar.gz"
+
+# Déploiement Replit
+replit-deploy: $(BENCHMARK_TARGET)
+	@echo "=== DÉPLOIEMENT REPLIT ==="
+	@echo "Benchmark prêt pour exécution sur Replit"
+	@echo "Commande: ./$(BENCHMARK_TARGET)"
+
+# === TARGETS DÉVELOPPEMENT ===
+
+dev-setup:
+	@echo "=== SETUP DÉVELOPPEMENT ==="
+	sudo apt-get update
+	sudo apt-get install -y build-essential gdb valgrind cppcheck
+	@echo "Environnement de développement configuré"
+
+# Vérification mémoire avec Valgrind
+memcheck: $(BENCHMARK_TARGET)
+	@echo "=== VÉRIFICATION MÉMOIRE ==="
+	valgrind --leak-check=full --show-leak-kinds=all ./$(BENCHMARK_TARGET) --size=64 --iterations=10
+
+# === TARGETS DOCUMENTATION ===
+
+docs:
+	@echo "=== GÉNÉRATION DOCUMENTATION ==="
+	doxygen Doxyfile || echo "Doxygen non disponible"
+	@echo "Documentation générée dans docs/"
+
+# === DÉPENDANCES ===
+$(BENCHMARK_OBJ): $(LIBVISUALMEM_HDR)
+$(LIBVISUALMEM_OBJ): $(LIBVISUALMEM_HDR)
