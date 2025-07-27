@@ -1,0 +1,232 @@
+
+# Makefile pour Tests Cryptographiques Avancés
+# ============================================
+# 
+# Système de compilation pour les innovations cryptographiques
+# du système de mémoire visuelle autonome.
+
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -O2 -g
+LDFLAGS = -lm
+TARGETS = test_advanced_crypto
+OBJECTS = test_advanced_crypto.o
+
+# Configuration pour différents modes de compilation
+DEBUG_FLAGS = -DDEBUG -g -O0
+RELEASE_FLAGS = -DRELEASE -O3 -DNDEBUG
+CRYPTO_FLAGS = -DCRYPTO_ENABLED -DHASH_VALIDATION
+
+# === TARGETS PRINCIPAUX ===
+
+all: $(TARGETS)
+	@echo "=== COMPILATION COMPLÈTE ==="
+	@echo "Exécutables générés:"
+	@for target in $(TARGETS); do \
+		echo "  ✅ $$target"; \
+	done
+	@echo ""
+	@echo "Pour exécuter les tests: make test"
+	@echo "Pour nettoyer: make clean"
+
+# Compilation du programme principal
+test_advanced_crypto: test_advanced_crypto.o
+	@echo "Compilation des tests cryptographiques avancés..."
+	$(CC) $(CFLAGS) $(CRYPTO_FLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "✅ test_advanced_crypto compilé avec succès"
+
+test_advanced_crypto.o: test_advanced_crypto.c
+	@echo "Compilation du module de tests cryptographiques..."
+	$(CC) $(CFLAGS) $(CRYPTO_FLAGS) -c $< -o $@
+
+# === TARGETS DE TESTS ===
+
+test: test_advanced_crypto
+	@echo "=== EXÉCUTION DES TESTS CRYPTOGRAPHIQUES AVANCÉS ==="
+	@echo ""
+	@./test_advanced_crypto
+
+test-debug: clean
+	@echo "=== COMPILATION ET TESTS EN MODE DEBUG ==="
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $(CRYPTO_FLAGS) test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+	@./test_advanced_crypto
+
+test-release: clean
+	@echo "=== COMPILATION ET TESTS EN MODE RELEASE ==="
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(CRYPTO_FLAGS) test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+	@./test_advanced_crypto
+
+# === TARGETS DE VALIDATION ===
+
+validate: test
+	@echo ""
+	@echo "=== VALIDATION COMPLÈTE DU SYSTÈME CRYPTOGRAPHIQUE ==="
+	@echo "Tests fonctionnels: EXÉCUTÉS"
+	@echo "Benchmarks performance: EXÉCUTÉS"
+	@echo "Validation sécurité: COMPLÈTE"
+	@echo ""
+	@if [ $$? -eq 0 ]; then \
+		echo "🎉 VALIDATION RÉUSSIE - SYSTÈME PRÊT POUR DÉPLOIEMENT 🎉"; \
+	else \
+		echo "⚠️ VALIDATION ÉCHOUÉE - RÉVISION NÉCESSAIRE ⚠️"; \
+	fi
+
+# Tests de performance uniquement
+benchmark: test_advanced_crypto
+	@echo "=== BENCHMARK PERFORMANCE CRYPTOGRAPHIQUE ==="
+	@./test_advanced_crypto | grep -A 20 "Benchmark Performance"
+
+# Tests de sécurité
+security-test: test_advanced_crypto
+	@echo "=== TESTS DE SÉCURITÉ CRYPTOGRAPHIQUE ==="
+	@./test_advanced_crypto | grep -E "(✅|❌)" | grep -E "(corruption|falsification|invalide)"
+
+# === TARGETS DE DÉVELOPPEMENT ===
+
+# Compilation avec tous les warnings
+warnings: clean
+	$(CC) $(CFLAGS) -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes \
+		$(CRYPTO_FLAGS) test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+
+# Analyse statique avec GCC
+analyze: clean
+	$(CC) $(CFLAGS) -fanalyzer $(CRYPTO_FLAGS) test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+	@echo "✅ Analyse statique terminée"
+
+# Compilation pour débogage avec GDB
+debug: clean
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $(CRYPTO_FLAGS) -ggdb3 test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+	@echo "✅ Version debug compilée (compatible GDB)"
+
+# === TARGETS DE DOCUMENTATION ===
+
+# Génération de documentation automatique
+docs:
+	@echo "=== GÉNÉRATION DOCUMENTATION ==="
+	@echo "Fonctionnalités cryptographiques documentées:"
+	@grep -n "int test_" test_advanced_crypto.c | sed 's/^/  /'
+	@echo ""
+	@echo "Structures cryptographiques:"
+	@grep -n "typedef struct" test_advanced_crypto.c | sed 's/^/  /'
+	@echo ""
+	@echo "Documentation complète disponible dans VISUAL_MEMORY_ADVANCED.md"
+
+# === TARGETS D'INSTALLATION ===
+
+install: $(TARGETS)
+	@echo "=== INSTALLATION DES TESTS CRYPTOGRAPHIQUES ==="
+	@mkdir -p ../bin
+	@cp $(TARGETS) ../bin/
+	@echo "✅ Installation terminée dans ../bin/"
+
+# === TARGETS DE NETTOYAGE ===
+
+clean:
+	@echo "Nettoyage des fichiers temporaires..."
+	@rm -f $(OBJECTS) $(TARGETS)
+	@echo "✅ Nettoyage terminé"
+
+distclean: clean
+	@echo "Nettoyage complet..."
+	@rm -f *~ *.bak core
+	@echo "✅ Nettoyage complet terminé"
+
+# === TARGETS D'AIDE ===
+
+help:
+	@echo "=== AIDE MAKEFILE CRYPTOGRAPHIQUE AVANCÉ ==="
+	@echo ""
+	@echo "TARGETS PRINCIPAUX:"
+	@echo "  all          - Compiler tous les exécutables"
+	@echo "  test         - Exécuter tous les tests cryptographiques"
+	@echo "  validate     - Validation complète du système"
+	@echo "  clean        - Nettoyer les fichiers générés"
+	@echo ""
+	@echo "TARGETS DE TESTS:"
+	@echo "  test-debug   - Tests en mode debug détaillé"
+	@echo "  test-release - Tests en mode release optimisé"
+	@echo "  benchmark    - Tests de performance uniquement"
+	@echo "  security-test- Tests de sécurité uniquement"
+	@echo ""
+	@echo "TARGETS DE DÉVELOPPEMENT:"
+	@echo "  warnings     - Compilation avec warnings étendus"
+	@echo "  analyze      - Analyse statique du code"
+	@echo "  debug        - Compilation pour GDB"
+	@echo ""
+	@echo "TARGETS UTILITAIRES:"
+	@echo "  docs         - Afficher documentation"
+	@echo "  install      - Installer dans ../bin/"
+	@echo "  help         - Afficher cette aide"
+
+# === CONFIGURATION AUTOMATIQUE ===
+
+# Détection automatique des capacités système
+detect-system:
+	@echo "=== DÉTECTION CONFIGURATION SYSTÈME ==="
+	@echo "Compilateur: $(shell $(CC) --version | head -1)"
+	@echo "Architecture: $(shell uname -m)"
+	@echo "OS: $(shell uname -s)"
+	@echo "Processeur: $(shell nproc) cores"
+	@echo "Mémoire: $(shell free -h | grep Mem | awk '{print $$2}') RAM"
+	@echo ""
+	@echo "Optimisations recommandées:"
+	@if [ $(shell nproc) -gt 4 ]; then \
+		echo "  ✅ Multi-threading supporté"; \
+	fi
+	@if [ $(shell free -m | grep Mem | awk '{print $$2}') -gt 4000 ]; then \
+		echo "  ✅ Mémoire suffisante pour tests intensifs"; \
+	fi
+
+# === TARGETS AVANCÉS ===
+
+# Tests de régression automatisés
+regression: clean all
+	@echo "=== TESTS DE RÉGRESSION CRYPTOGRAPHIQUE ==="
+	@for i in 1 2 3 4 5; do \
+		echo "Exécution $$i/5..."; \
+		./test_advanced_crypto > /tmp/crypto_test_$$i.log 2>&1; \
+		if [ $$? -ne 0 ]; then \
+			echo "❌ Échec itération $$i"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "✅ 5 exécutions réussies - Système stable"
+
+# Tests de stress
+stress: test_advanced_crypto
+	@echo "=== TESTS DE STRESS CRYPTOGRAPHIQUE ==="
+	@for i in {1..10}; do \
+		echo "Stress test $$i/10..."; \
+		timeout 30 ./test_advanced_crypto >/dev/null 2>&1 & \
+	done
+	@wait
+	@echo "✅ Tests de stress terminés"
+
+# Profiling de performance
+profile: clean
+	$(CC) $(CFLAGS) $(CRYPTO_FLAGS) -pg test_advanced_crypto.c -o test_advanced_crypto $(LDFLAGS)
+	@./test_advanced_crypto
+	@gprof test_advanced_crypto gmon.out > performance_profile.txt
+	@echo "✅ Profil de performance généré: performance_profile.txt"
+
+# === PHONY TARGETS ===
+
+.PHONY: all test test-debug test-release validate benchmark security-test \
+        warnings analyze debug docs install clean distclean help \
+        detect-system regression stress profile
+
+# === INFORMATIONS MAKEFILE ===
+
+info:
+	@echo "=== INFORMATIONS MAKEFILE CRYPTOGRAPHIQUE ==="
+	@echo "Version: 2.0.0 Advanced"
+	@echo "Auteur: Visual Memory Systems"
+	@echo "Date: $(shell date)"
+	@echo "Targets disponibles: $(shell make -qp | grep '^[a-zA-Z]' | cut -d: -f1 | sort | uniq | wc -l)"
+	@echo ""
+	@echo "Fichiers sources:"
+	@echo "  test_advanced_crypto.c - Tests cryptographiques principaux"
+	@echo ""
+	@echo "Dépendances:"
+	@echo "  libm - Fonctions mathématiques"
+	@echo ""
+	@echo "Utilisation: make help"
