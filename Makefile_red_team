@@ -1,0 +1,43 @@
+
+# Makefile Red Team Testing Suite
+# ===============================
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99 -pthread -g -DDEBUG
+LIBS = -lm -lpthread
+
+# Targets principaux
+all: red_team_test
+
+# Compilation du test Red Team complet
+red_team_test: test_red_team_complete.c libvisualmem.c visual_ram_simple.h
+	$(CC) $(CFLAGS) -o red_team_test test_red_team_complete.c libvisualmem.c $(LIBS)
+
+# Execution Red Team avec rapport détaillé
+run-red-team: red_team_test
+	@echo "=== LANCEMENT RED TEAM TESTING SUITE ==="
+	@echo "Objectif: Identifier toutes les vulnérabilités possibles"
+	@echo "Durée estimée: 2-3 minutes"
+	@echo ""
+	./red_team_test | tee red_team_report.txt
+	@echo ""
+	@echo "Rapport sauvé dans: red_team_report.txt"
+
+# Test de sécurité intensif
+run-security-intensive: red_team_test  
+	@echo "=== TEST SÉCURITÉ INTENSIF ==="
+	valgrind --tool=memcheck --leak-check=full ./red_team_test
+
+# Test avec profiling
+run-profiling: red_team_test
+	@echo "=== PROFILING RED TEAM ==="
+	gprof ./red_team_test gmon.out > red_team_profile.txt
+
+clean:
+	rm -f red_team_test *.txt *.out gmon.out
+
+# Debug version avec sanitizers
+debug: CFLAGS += -fsanitize=address -fsanitize=thread -fno-omit-frame-pointer
+debug: red_team_test
+
+.PHONY: all run-red-team run-security-intensive run-profiling clean debug

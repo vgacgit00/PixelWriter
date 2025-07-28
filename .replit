@@ -68,3 +68,24 @@ args = "make -f Makefile_tests_exhaustifs run-all"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "echo \"✅ Tests exhaustifs terminés - Consultez les rapports générés\""
+
+[[workflows.workflow]]
+name = "Red Team Security Test"
+author = 45578232
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_red_team clean"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_red_team all"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_red_team run-red-team"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"🔴 Red Team Test terminé - Consultez red_team_report.txt pour le rapport complet\""
