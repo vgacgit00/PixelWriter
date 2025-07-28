@@ -1,0 +1,85 @@
+
+# Makefile pour Tests Exhaustifs - Système de Mémoire Visuelle
+# ===========================================================
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99 -pthread -g
+LIBS = -lm -lpthread
+
+# Cibles principales
+all: test_exhaustif_complet benchmark_avance validation_complete
+
+# Compilation test exhaustif
+test_exhaustif_complet: test_exhaustif_complet.c libvisualmem.c visual_ram_simple.h
+	$(CC) $(CFLAGS) -o test_exhaustif_complet test_exhaustif_complet.c libvisualmem.c $(LIBS)
+
+# Compilation benchmark avancé  
+benchmark_avance: benchmark_detailed.c libvisualmem.c
+	$(CC) $(CFLAGS) -o benchmark_avance benchmark_detailed.c libvisualmem.c $(LIBS)
+
+# Tests de validation complète
+validation_complete: test_libvisualmem.c test_complete.c test_advanced_crypto.c libvisualmem.c
+	$(CC) $(CFLAGS) -o validation_complete test_libvisualmem.c libvisualmem.c $(LIBS)
+	$(CC) $(CFLAGS) -o test_complete_v2 test_complete.c $(LIBS)  
+	$(CC) $(CFLAGS) -o test_crypto_avance test_advanced_crypto.c $(LIBS)
+
+# Exécution de tous les tests
+run-all: all
+	@echo "=== EXÉCUTION TESTS EXHAUSTIFS ==="
+	@echo "1. Test exhaustif complet..."
+	./test_exhaustif_complet
+	@echo "\n2. Benchmark avancé..."  
+	./benchmark_avance
+	@echo "\n3. Validation complète..."
+	./validation_complete
+	@echo "\n4. Test complet v2..."
+	./test_complete_v2
+	@echo "\n5. Test crypto avancé..."
+	./test_crypto_avance
+
+# Tests de performance
+run-performance: benchmark_avance
+	@echo "=== TESTS PERFORMANCE ==="
+	./benchmark_avance > resultats_performance.txt
+	@echo "Résultats sauvés dans resultats_performance.txt"
+
+# Tests de robustesse  
+run-robustesse: test_exhaustif_complet
+	@echo "=== TESTS ROBUSTESSE ==="
+	./test_exhaustif_complet > resultats_robustesse.txt
+	@echo "Résultats sauvés dans resultats_robustesse.txt"
+
+# Nettoyage
+clean:
+	rm -f test_exhaustif_complet benchmark_avance validation_complete
+	rm -f test_complete_v2 test_crypto_avance
+	rm -f *.txt *.log
+
+# Installation dépendances
+install-deps:
+	@echo "Installation des dépendances pour tests exhaustifs..."
+	sudo apt-get update
+	sudo apt-get install -y build-essential libsdl2-dev
+
+# Compilation optimisée pour production
+release: CFLAGS += -O3 -DNDEBUG -march=native
+release: all
+
+# Compilation debug  
+debug: CFLAGS += -DDEBUG -fsanitize=address -fno-omit-frame-pointer
+debug: all
+
+# Documentation des tests
+doc:
+	@echo "=== DOCUMENTATION TESTS ==="
+	@echo "Targets disponibles:"
+	@echo "  all              - Compile tous les tests"
+	@echo "  run-all          - Exécute tous les tests"  
+	@echo "  run-performance  - Tests de performance uniquement"
+	@echo "  run-robustesse   - Tests de robustesse uniquement"
+	@echo "  clean            - Nettoie les fichiers générés"
+	@echo "  install-deps     - Installe les dépendances"
+	@echo "  release          - Compilation optimisée"
+	@echo "  debug            - Compilation avec debug"
+
+.PHONY: all run-all run-performance run-robustesse clean install-deps release debug doc

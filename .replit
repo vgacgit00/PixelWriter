@@ -47,3 +47,24 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "make all && ./demo"
+
+[[workflows.workflow]]
+name = "Tests Exhaustifs Complets"
+author = 45578232
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_tests_exhaustifs install-deps"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_tests_exhaustifs all"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make -f Makefile_tests_exhaustifs run-all"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"✅ Tests exhaustifs terminés - Consultez les rapports générés\""
