@@ -1,4 +1,3 @@
-
 /**
  * LIBVISUALMEM V2.0 - VERSION SÉCURISÉE ET OPTIMISÉE
  * ==================================================
@@ -22,11 +21,16 @@
 #ifndef LIBVISUALMEM_V2_H
 #define LIBVISUALMEM_V2_H
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
-#include <pthread.h>
+#include <string.h>
 #include <time.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/types.h>
+#define _GNU_SOURCE
 
 // === CONSTANTES DE SÉCURITÉ ===
 #define VISUALMEM_V2_VERSION "2.0.0-SECURE"
@@ -142,24 +146,24 @@ typedef struct {
     visualmem_v2_mode_t mode;
     int width, height;
     uint32_t* framebuffer;
-    
+
     // Sécurité et thread safety
     pthread_mutex_t context_mutex;      // Mutex principal contexte
     pthread_rwlock_t allocations_lock;  // Lock liste allocations
     allocation_metadata_t* allocations; // Liste allocations sécurisées
-    
+
     // Quotas et limites
     context_limits_t limits;
-    
+
     // Monitoring sécurité
     security_monitor_t security;
-    
+
     // Audit trail
     audit_entry_t* audit_trail;
     int audit_count;
     int audit_capacity;
     pthread_mutex_t audit_mutex;
-    
+
     // État système
     bool autonomous_mode;
     bool initialized;
