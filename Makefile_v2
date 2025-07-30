@@ -1,0 +1,204 @@
+
+# MAKEFILE VISUALMEM V2 - VERSION SÉCURISÉE
+# =========================================
+#
+# Compilation optimisée avec flags de sécurité renforcés
+# et support complet thread safety + debugging avancé
+
+# === CONFIGURATION ===
+CC = gcc
+CFLAGS = -std=c11 -Wall -Wextra -Werror -O2 -g
+SECURITY_FLAGS = -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -Wformat=2
+THREAD_FLAGS = -pthread -D_REENTRANT -D_THREAD_SAFE
+DEBUG_FLAGS = -DDEBUG -fsanitize=address -fsanitize=thread -fno-omit-frame-pointer
+LIBS = -lpthread -lm
+
+# Directories
+SRC_DIR = .
+BUILD_DIR = build_v2
+TARGET_DIR = bin_v2
+
+# === TARGETS PRINCIPAUX ===
+.PHONY: all clean install test benchmark security-test demo help
+
+all: $(TARGET_DIR)/libvisualmem_v2.so $(TARGET_DIR)/libvisualmem_v2.a $(TARGET_DIR)/test_visualmem_v2 $(TARGET_DIR)/demo_v2
+
+# === RÈGLES DE COMPILATION ===
+
+# Bibliothèque partagée V2
+$(TARGET_DIR)/libvisualmem_v2.so: $(BUILD_DIR)/libvisualmem_v2.o | $(TARGET_DIR)
+	@echo "🔗 Création bibliothèque partagée V2..."
+	$(CC) -shared -fPIC $(SECURITY_FLAGS) $(THREAD_FLAGS) -o $@ $< $(LIBS)
+
+# Bibliothèque statique V2
+$(TARGET_DIR)/libvisualmem_v2.a: $(BUILD_DIR)/libvisualmem_v2.o | $(TARGET_DIR)
+	@echo "📚 Création bibliothèque statique V2..."
+	ar rcs $@ $<
+
+# Objet principal V2
+$(BUILD_DIR)/libvisualmem_v2.o: libvisualmem_v2.c libvisualmem_v2.h | $(BUILD_DIR)
+	@echo "🔧 Compilation libvisualmem_v2.c..."
+	$(CC) $(CFLAGS) $(SECURITY_FLAGS) $(THREAD_FLAGS) -fPIC -c -o $@ $<
+
+# Tests V2
+$(TARGET_DIR)/test_visualmem_v2: test_visualmem_v2.c $(TARGET_DIR)/libvisualmem_v2.a | $(TARGET_DIR)
+	@echo "🧪 Compilation tests V2..."
+	$(CC) $(CFLAGS) $(SECURITY_FLAGS) $(THREAD_FLAGS) -o $@ $< -L$(TARGET_DIR) -lvisualmem_v2 $(LIBS)
+
+# Demo V2
+$(TARGET_DIR)/demo_v2: demo_v2.c $(TARGET_DIR)/libvisualmem_v2.a | $(TARGET_DIR)
+	@echo "🎮 Compilation démo V2..."
+	$(CC) $(CFLAGS) $(SECURITY_FLAGS) $(THREAD_FLAGS) -o $@ $< -L$(TARGET_DIR) -lvisualmem_v2 $(LIBS)
+
+# === CIBLES UTILITAIRES ===
+
+# Création répertoires
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+$(TARGET_DIR):
+	@mkdir -p $(TARGET_DIR)
+
+# Installation système
+install: all
+	@echo "📦 Installation système V2..."
+	sudo cp $(TARGET_DIR)/libvisualmem_v2.so /usr/local/lib/
+	sudo cp $(TARGET_DIR)/libvisualmem_v2.a /usr/local/lib/
+	sudo cp libvisualmem_v2.h /usr/local/include/
+	sudo ldconfig
+
+# Tests sécurité
+security-test: $(TARGET_DIR)/test_visualmem_v2
+	@echo "🔒 Exécution tests sécurité V2..."
+	@echo "================================"
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH $(TARGET_DIR)/test_visualmem_v2
+
+# Tests complets
+test: security-test
+	@echo "✅ Tests V2 terminés"
+
+# Benchmark performance
+benchmark: $(TARGET_DIR)/test_visualmem_v2
+	@echo "⚡ Benchmark performance V2..."
+	@echo "=============================="
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH $(TARGET_DIR)/test_visualmem_v2 --benchmark
+
+# Démonstration interactive
+demo: $(TARGET_DIR)/demo_v2
+	@echo "🎮 Démonstration V2..."
+	@echo "====================="
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH $(TARGET_DIR)/demo_v2
+
+# === CIBLES DEBUG ===
+
+# Version debug avec sanitizers
+debug: CFLAGS += $(DEBUG_FLAGS)
+debug: all
+	@echo "🐛 Version debug V2 compilée avec sanitizers"
+
+# Analyse statique
+static-analysis:
+	@echo "🔍 Analyse statique code V2..."
+	@which cppcheck >/dev/null 2>&1 || (echo "⚠️  cppcheck non installé"; exit 1)
+	cppcheck --enable=all --inconclusive --std=c11 \
+		--suppress=missingIncludeSystem \
+		libvisualmem_v2.c libvisualmem_v2.h test_visualmem_v2.c
+
+# Profiling performance
+profile: $(TARGET_DIR)/test_visualmem_v2
+	@echo "📊 Profiling performance V2..."
+	@which valgrind >/dev/null 2>&1 || (echo "⚠️  valgrind non installé"; exit 1)
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH \
+		valgrind --tool=callgrind --collect-jumps=yes \
+		$(TARGET_DIR)/test_visualmem_v2
+
+# Test fuites mémoire
+memcheck: $(TARGET_DIR)/test_visualmem_v2
+	@echo "🧠 Vérification fuites mémoire V2..."
+	@which valgrind >/dev/null 2>&1 || (echo "⚠️  valgrind non installé"; exit 1)
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH \
+		valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
+		--track-origins=yes $(TARGET_DIR)/test_visualmem_v2
+
+# === CIBLES DOCUMENTATION ===
+
+# Génération documentation
+docs:
+	@echo "📖 Génération documentation V2..."
+	@which doxygen >/dev/null 2>&1 || (echo "⚠️  doxygen non installé"; exit 1)
+	doxygen Doxyfile_v2
+
+# Rapport sécurité
+security-report: $(TARGET_DIR)/test_visualmem_v2
+	@echo "📋 Génération rapport sécurité V2..."
+	LD_LIBRARY_PATH=$(TARGET_DIR):$$LD_LIBRARY_PATH $(TARGET_DIR)/test_visualmem_v2 --security-report > SECURITY_REPORT_V2.md
+	@echo "✅ Rapport généré: SECURITY_REPORT_V2.md"
+
+# === NETTOYAGE ===
+
+clean:
+	@echo "🧹 Nettoyage fichiers temporaires..."
+	rm -rf $(BUILD_DIR) $(TARGET_DIR)
+	rm -f *.o *.so *.a core gmon.out callgrind.out.*
+	rm -f SECURITY_REPORT_V2.md
+
+clean-all: clean
+	@echo "🧽 Nettoyage complet..."
+	rm -rf docs/ *.log *.tmp
+
+# === AIDE ===
+
+help:
+	@echo "🔒 MAKEFILE VISUALMEM V2 - VERSION SÉCURISÉE"
+	@echo "============================================"
+	@echo ""
+	@echo "Cibles principales:"
+	@echo "  all              - Compile tout (bibliothèques + tests + demo)"
+	@echo "  install          - Installation système"
+	@echo "  test             - Exécute tous les tests"
+	@echo "  security-test    - Tests sécurité spécifiques"
+	@echo "  benchmark        - Tests performance"
+	@echo "  demo             - Démonstration interactive"
+	@echo ""
+	@echo "Cibles debug:"
+	@echo "  debug            - Compilation avec debug + sanitizers"
+	@echo "  static-analysis  - Analyse statique avec cppcheck"
+	@echo "  profile          - Profiling avec valgrind"
+	@echo "  memcheck         - Vérification fuites mémoire"
+	@echo ""
+	@echo "Cibles documentation:"
+	@echo "  docs             - Génération documentation Doxygen"
+	@echo "  security-report  - Rapport sécurité détaillé"
+	@echo ""
+	@echo "Cibles nettoyage:"
+	@echo "  clean            - Supprime fichiers temporaires"
+	@echo "  clean-all        - Nettoyage complet"
+	@echo ""
+	@echo "Exemples d'usage:"
+	@echo "  make all && make test     # Compilation et tests"
+	@echo "  make debug memcheck       # Version debug + analyse mémoire"
+	@echo "  make install              # Installation système"
+
+# === INFORMATIONS BUILD ===
+
+info:
+	@echo "📊 INFORMATIONS BUILD V2"
+	@echo "========================"
+	@echo "Compilateur:     $(CC)"
+	@echo "Flags standard:  $(CFLAGS)"
+	@echo "Flags sécurité:  $(SECURITY_FLAGS)"
+	@echo "Flags thread:    $(THREAD_FLAGS)"
+	@echo "Bibliothèques:   $(LIBS)"
+	@echo "Répertoire src:  $(SRC_DIR)"
+	@echo "Répertoire build: $(BUILD_DIR)"
+	@echo "Répertoire cible: $(TARGET_DIR)"
+
+# === RÈGLES DÉPENDANCES ===
+
+# Dépendances automatiques
+-include $(BUILD_DIR)/*.d
+
+%.d: %.c
+	@$(CC) $(CFLAGS) -MM -MT $(@:.d=.o) $< > $@
+
+.SUFFIXES:
