@@ -1,0 +1,55 @@
+~/workspace$ make -f Makefile_v2 clean && make -f Makefile_v2 all
+🧹 Nettoyage fichiers temporaires...
+rm -rf build_v2 bin_v2
+rm -f *.o *.so *.a core gmon.out callgrind.out.*
+rm -f SECURITY_REPORT_V2.md
+🔧 Compilation libvisualmem_v2.c...
+gcc -std=c11 -Wall -Wextra -Werror -O2 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -Wformat=2 -pthread -D_REENTRANT -D_THREAD_SAFE -fPIC -c -o build_v2/libvisualmem_v2.o libvisualmem_v2.c
+In file included from libvisualmem_v2.c:10:
+libvisualmem_v2.h:95:5: error: unknown type name ‘pthread_rwlock_t’; did you mean ‘pthread_cond_t’?
+   95 |     pthread_rwlock_t lock;              // Lock lecture/écriture
+      |     ^~~~~~~~~~~~~~~~
+      |     pthread_cond_t
+libvisualmem_v2.h:121:5: error: unknown type name ‘uid_t’; did you mean ‘pid_t’?
+  121 |     uid_t user_id;                      // UID utilisateur
+      |     ^~~~~
+      |     pid_t
+libvisualmem_v2.h:148:5: error: unknown type name ‘pthread_rwlock_t’; did you mean ‘pthread_cond_t’?
+  148 |     pthread_rwlock_t allocations_lock;  // Lock liste allocations
+      |     ^~~~~~~~~~~~~~~~
+      |     pthread_cond_t
+libvisualmem_v2.c: In function ‘visualmem_v2_init’:
+libvisualmem_v2.c:202:9: error: implicit declaration of function ‘pthread_rwlock_init’; did you mean ‘pthread_cond_init’? [-Wimplicit-function-declaration]
+  202 |         pthread_rwlock_init(&ctx->allocations_lock, NULL) != 0 ||
+      |         ^~~~~~~~~~~~~~~~~~~
+      |         pthread_cond_init
+libvisualmem_v2.c:212:9: error: implicit declaration of function ‘pthread_rwlock_destroy’; did you mean ‘pthread_cond_destroy’? [-Wimplicit-function-declaration]
+  212 |         pthread_rwlock_destroy(&ctx->allocations_lock);
+      |         ^~~~~~~~~~~~~~~~~~~~~~
+      |         pthread_cond_destroy
+libvisualmem_v2.c: In function ‘visualmem_v2_alloc_secure’:
+libvisualmem_v2.c:298:5: error: implicit declaration of function ‘pthread_rwlock_wrlock’ [-Wimplicit-function-declaration]
+  298 |     pthread_rwlock_wrlock(&ctx->allocations_lock);
+      |     ^~~~~~~~~~~~~~~~~~~~~
+libvisualmem_v2.c:301:5: error: implicit declaration of function ‘pthread_rwlock_unlock’; did you mean ‘pthread_mutex_unlock’? [-Wimplicit-function-declaration]
+  301 |     pthread_rwlock_unlock(&ctx->allocations_lock);
+      |     ^~~~~~~~~~~~~~~~~~~~~
+      |     pthread_mutex_unlock
+libvisualmem_v2.c: In function ‘visualmem_v2_write_secure’:
+libvisualmem_v2.c:325:5: error: implicit declaration of function ‘pthread_rwlock_rdlock’ [-Wimplicit-function-declaration]
+  325 |     pthread_rwlock_rdlock(&ctx->allocations_lock);
+      |     ^~~~~~~~~~~~~~~~~~~~~
+libvisualmem_v2.c: In function ‘visualmem_v2_generate_security_report’:
+libvisualmem_v2.c:665:36: error: comparison of integer expressions of different signedness: ‘int’ and ‘size_t’ {aka ‘long unsigned int’} [-Werror=sign-compare]
+  665 |     return (written > 0 && written < buffer_size) ?
+      |                                    ^
+libvisualmem_v2.c: At top level:
+libvisualmem_v2.c:81:13: error: ‘verify_and_correct_ecc’ defined but not used [-Werror=unused-function]
+   81 | static bool verify_and_correct_ecc(uint8_t* data, const uint8_t* ecc_code) {
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+libvisualmem_v2.c:24:13: error: ‘g_security_initialized’ defined but not used [-Werror=unused-variable]
+   24 | static bool g_security_initialized = false;
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+cc1: all warnings being treated as errors
+make: *** [Makefile_v2:41: build_v2/libvisualmem_v2.o] Error 1
+~/workspace$ 
