@@ -1,324 +1,389 @@
 /**
- * LIBVISUALMEM V2.0 - VERSION SÉCURISÉE ET OPTIMISÉE
- * ==================================================
+ * LibVisualMem v2.0 - Hardware-Native Visual Memory Library
+ * ========================================================
  * 
- * Version complètement refactorisée intégrant toutes les corrections
- * de sécurité et optimisations identifiées par les audits Red Team.
+ * Real hardware implementation using X11, OpenGL, and direct framebuffer access
+ * for authentic visual memory operations on physical/virtual displays.
  * 
- * Nouveautés V2:
- * - Thread safety complet
- * - Codes correcteurs d'erreurs (ECC)
- * - Protection anti-overflow
- * - Quotas et limites sécurisées
- * - Monitoring sécurité temps réel
- * - Anti-screenshot protection
- * - Effacement sécurisé
- * - Audit trail complet
+ * Features:
+ * - Real X11/Xvfb display integration
+ * - Direct pixel manipulation on screen
+ * - Hardware-accelerated operations (OpenGL)
+ * - Multi-resolution support (640x480 to 1920x1080)
+ * - Authentic visual persistence
+ * - Performance optimized for real hardware
  * 
- * Copyright (C) 2025 - Visual Memory Security Edition
+ * Copyright (C) 2025 - Visual Memory Systems v2.0
+ * License: MIT
  */
 
 #ifndef LIBVISUALMEM_V2_H
 #define LIBVISUALMEM_V2_H
 
-#include <stdio.h>
-#include <stdlib.h>
+/**
+ * LibVisualMem v2.0 - Hardware-Native Visual Memory Library
+ * ========================================================
+ * 
+ * Real hardware implementation using X11, OpenGL, and direct framebuffer access
+ * for authentic visual memory operations on physical/virtual displays.
+ * 
+ * Features:
+ * - Real X11/Xvfb display integration
+ * - Direct pixel manipulation on screen
+ * - Hardware-accelerated operations (OpenGL)
+ * - Multi-resolution support (640x480 to 1920x1080)
+ * - Authentic visual persistence
+ * - Performance optimized for real hardware
+ * 
+ * Copyright (C) 2025 - Visual Memory Systems v2.0
+ * License: MIT
+ */
+
 #include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <time.h>
+#include <stddef.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <sys/types.h>
-#define _GNU_SOURCE
 
-// === CONSTANTES DE SÉCURITÉ ===
-#define VISUALMEM_V2_VERSION "2.0.0-SECURE"
-#define MAX_ALLOCATION_SIZE (1024 * 1024)  // 1MB max par allocation
-#define MAX_ALLOCATIONS_PER_CONTEXT 50     // Limite quotas
-#define MAX_TOTAL_MEMORY_PER_CONTEXT (10 * 1024 * 1024) // 10MB max
-#define MAX_CONCURRENT_OPERATIONS 10       // Limite concurrence
-#define CONTEXT_TIMEOUT_SECONDS 3600       // 1h timeout
-#define ECC_BLOCK_SIZE 64                   // Blocs avec correction erreurs
-#define ECC_CODE_SIZE 8                     // Taille code correcteur
-#define SECURE_ERASE_PASSES 4               // Passes effacement sécurisé
-#define AUDIT_TRAIL_MAX_ENTRIES 10000       // Historique audit
+// === LIBRARY VERSION ===
+#define LIBVISUALMEM_V2_VERSION_MAJOR 2
+#define LIBVISUALMEM_V2_VERSION_MINOR 0
+#define LIBVISUALMEM_V2_VERSION_PATCH 0
+#define LIBVISUALMEM_V2_VERSION "2.0.0"
 
-// === ÉNUMÉRATIONS ===
+// === HARDWARE CONFIGURATION ===
+#define VISUALMEM_V2_MAX_WIDTH 1920
+#define VISUALMEM_V2_MAX_HEIGHT 1080
+#define VISUALMEM_V2_MIN_WIDTH 640
+#define VISUALMEM_V2_MIN_HEIGHT 480
+#define VISUALMEM_V2_MAX_ALLOCATIONS 2048
+#define VISUALMEM_V2_BYTES_PER_PIXEL 4  // RGBA32
+
+// === DISPLAY MODES ===
 typedef enum {
-    VISUALMEM_V2_MODE_SIMULATE = 0,
-    VISUALMEM_V2_MODE_PIXEL = 1,
-    VISUALMEM_V2_MODE_SECURE = 2         // Nouveau mode sécurisé
+    VISUALMEM_V2_MODE_X11_WINDOW,    // X11 windowed display
+    VISUALMEM_V2_MODE_X11_FULLSCREEN, // X11 fullscreen
+    VISUALMEM_V2_MODE_FRAMEBUFFER,   // Direct framebuffer access
+    VISUALMEM_V2_MODE_XVFB,          // Virtual framebuffer (Xvfb)
+    VISUALMEM_V2_MODE_OPENGL         // OpenGL accelerated
 } visualmem_v2_mode_t;
 
+// === HARDWARE BACKENDS ===
+typedef enum {
+    VISUALMEM_V2_BACKEND_AUTO,       // Auto-detect best backend
+    VISUALMEM_V2_BACKEND_X11,        // X11/XLib backend
+    VISUALMEM_V2_BACKEND_FRAMEBUFFER, // Linux framebuffer
+    VISUALMEM_V2_BACKEND_OPENGL,     // OpenGL backend
+    VISUALMEM_V2_BACKEND_DRM         // Direct Rendering Manager
+} visualmem_v2_backend_t;
+
+// === ERROR CODES ===
 typedef enum {
     VISUALMEM_V2_SUCCESS = 0,
-    VISUALMEM_V2_ERROR_INVALID_PARAMS = -1,
-    VISUALMEM_V2_ERROR_OUT_OF_MEMORY = -2,
-    VISUALMEM_V2_ERROR_QUOTA_EXCEEDED = -3,
-    VISUALMEM_V2_ERROR_SIZE_TOO_LARGE = -4,
-    VISUALMEM_V2_ERROR_CORRUPTION_DETECTED = -5,
-    VISUALMEM_V2_ERROR_THREAD_SAFETY = -6,
-    VISUALMEM_V2_ERROR_SECURITY_VIOLATION = -7
-} visualmem_v2_result_t;
+    VISUALMEM_V2_ERROR_INIT_FAILED = -1,
+    VISUALMEM_V2_ERROR_DISPLAY_UNAVAILABLE = -2,
+    VISUALMEM_V2_ERROR_HARDWARE_UNSUPPORTED = -3,
+    VISUALMEM_V2_ERROR_OUT_OF_VIDEO_MEMORY = -4,
+    VISUALMEM_V2_ERROR_INVALID_ADDRESS = -5,
+    VISUALMEM_V2_ERROR_ALLOCATION_FAILED = -6,
+    VISUALMEM_V2_ERROR_DISPLAY_LOST = -7,
+    VISUALMEM_V2_ERROR_OPENGL_FAILED = -8,
+    VISUALMEM_V2_ERROR_THREAD_FAILED = -9,
+    VISUALMEM_V2_ERROR_INVALID_RESOLUTION = -10
+} visualmem_v2_error_t;
 
+// === PIXEL FORMATS ===
 typedef enum {
-    SECURITY_EVENT_ALLOCATION = 0,
-    SECURITY_EVENT_FREE = 1,
-    SECURITY_EVENT_READ = 2,
-    SECURITY_EVENT_WRITE = 3,
-    SECURITY_EVENT_CORRUPTION = 4,
-    SECURITY_EVENT_ATTACK_DETECTED = 5,
-    SECURITY_EVENT_QUOTA_EXCEEDED = 6,
-    SECURITY_EVENT_SUSPICIOUS_PATTERN = 7
-} security_event_type_t;
+    VISUALMEM_V2_PIXEL_RGBA32,       // 32-bit RGBA
+    VISUALMEM_V2_PIXEL_RGB24,        // 24-bit RGB
+    VISUALMEM_V2_PIXEL_RGB16,        // 16-bit RGB565
+    VISUALMEM_V2_PIXEL_MONOCHROME    // 1-bit monochrome
+} visualmem_v2_pixel_format_t;
 
-typedef enum {
-    SEVERITY_LOW = 1,
-    SEVERITY_MEDIUM = 2,
-    SEVERITY_HIGH = 3,
-    SEVERITY_CRITICAL = 4
-} security_severity_t;
-
-// === STRUCTURES SÉCURISÉES ===
-
-// Bloc de données avec correction d'erreurs
+// === HARDWARE CAPABILITIES ===
 typedef struct {
-    uint8_t data[ECC_BLOCK_SIZE];        // Données utiles
-    uint8_t ecc_code[ECC_CODE_SIZE];     // Code correcteur Reed-Solomon
-    uint32_t checksum;                   // Checksum intégrité
-    uint64_t timestamp;                  // Timestamp création/modification
-    uint32_t access_count;               // Compteur accès (détection anomalies)
-} __attribute__((packed)) secure_data_block_t;
+    int has_x11;                     // X11 support available
+    int has_opengl;                  // OpenGL support available
+    int has_framebuffer;             // Direct framebuffer access
+    int has_drm;                     // DRM/KMS support
+    int max_texture_size;            // Maximum OpenGL texture size
+    int video_memory_mb;             // Available video memory (MB)
+    char gpu_vendor[64];             // GPU vendor string
+    char gpu_model[128];             // GPU model string
+} visualmem_v2_hardware_caps_t;
 
-// Métadonnées d'allocation sécurisées
-typedef struct allocation_metadata {
-    void* address;                       // Adresse allocation
-    size_t size;                        // Taille allocation
-    char label[64];                     // Label sécurisé
-    pthread_rwlock_t lock;              // Lock lecture/écriture
-    volatile int ref_count;             // Compteur références atomique
-    volatile bool is_free;              // Flag libération
-    time_t creation_time;               // Timestamp création
-    time_t last_access_time;            // Dernier accès
-    uint32_t security_hash;             // Hash sécurité intégrité
-    struct allocation_metadata* next;    // Liste chaînée
-} allocation_metadata_t;
-
-// Quotas et limites par contexte
+// === X11 DISPLAY CONTEXT ===
 typedef struct {
-    int current_allocations;            // Allocations actuelles
-    size_t current_total_memory;        // Mémoire totale utilisée
-    int concurrent_operations;          // Opérations concurrentes
-    time_t creation_time;               // Création contexte
-    time_t last_activity;               // Dernière activité
-    int security_violations;            // Violations sécurité
-    double baseline_timing[8];          // Timing baseline (détection anomalies)
-} context_limits_t;
+    Display* display;                // X11 display connection
+    Window window;                   // X11 window handle
+    GC gc;                          // Graphics context
+    XImage* ximage;                 // X11 image buffer
+    Colormap colormap;              // Color map
+    int screen;                     // Screen number
+    Visual* visual;                 // Visual information
+    int depth;                      // Color depth
+} visualmem_v2_x11_context_t;
 
-// Entrée audit trail
+// === OPENGL CONTEXT ===
 typedef struct {
-    uint64_t timestamp;                 // Timestamp précis
-    security_event_type_t event_type;   // Type événement
-    security_severity_t severity;       // Sévérité
-    pid_t process_id;                   // PID processus
-    uid_t user_id;                      // UID utilisateur
-    void* address;                      // Adresse concernée
-    size_t size;                        // Taille opération
-    char details[256];                  // Détails événement
-    uint32_t hash;                      // Hash pour intégrité
-} audit_entry_t;
+    void* gl_context;               // OpenGL context (GLXContext)
+    unsigned int texture_id;        // OpenGL texture ID
+    unsigned int framebuffer_id;    // OpenGL framebuffer ID
+    unsigned int shader_program;    // Shader program ID
+    int gl_version_major;           // OpenGL major version
+    int gl_version_minor;           // OpenGL minor version
+} visualmem_v2_opengl_context_t;
 
-// Monitoring sécurité temps réel
+// === FRAMEBUFFER CONTEXT ===
 typedef struct {
-    int buffer_overflow_attempts;       // Tentatives overflow
-    int corruption_detections;          // Corruptions détectées
-    int timing_anomalies;              // Anomalies temporelles
-    int concurrent_violations;          // Violations concurrence
-    int suspicious_patterns;            // Patterns suspects
-    time_t last_security_scan;         // Dernier scan sécurité
-    bool screenshot_protection_active;  // Protection screenshot
-} security_monitor_t;
+    int fb_fd;                      // Framebuffer file descriptor
+    void* fb_memory;                // Mapped framebuffer memory
+    size_t fb_size;                 // Framebuffer size in bytes
+    int fb_width;                   // Framebuffer width
+    int fb_height;                  // Framebuffer height
+    int fb_bpp;                     // Bits per pixel
+    int fb_stride;                  // Bytes per line
+} visualmem_v2_framebuffer_context_t;
 
-// Contexte principal V2 sécurisé
+// === MEMORY ALLOCATION INFO ===
 typedef struct {
-    // Configuration de base
+    void* visual_addr;              // Visual coordinate address
+    size_t size;                    // Allocated size in bytes
+    int x, y;                       // Screen coordinates
+    int width, height;              // Allocation dimensions
+    uint32_t checksum;              // Data integrity checksum
+    uint64_t timestamp;             // Allocation timestamp
+    int is_active;                  // Allocation status
+    char label[64];                 // Allocation label
+    pthread_mutex_t mutex;          // Thread safety
+} visualmem_v2_allocation_t;
+
+// === PERFORMANCE METRICS ===
+typedef struct {
+    uint64_t total_allocations;     // Total allocations made
+    uint64_t total_deallocations;   // Total deallocations
+    uint64_t bytes_written;         // Total bytes written
+    uint64_t bytes_read;            // Total bytes read
+    double avg_write_speed_mbps;    // Average write speed (MB/s)
+    double avg_read_speed_mbps;     // Average read speed (MB/s)
+    uint64_t display_refreshes;     // Display refresh count
+    double frame_rate;              // Current frame rate
+    uint64_t pixel_operations;      // Total pixel operations
+} visualmem_v2_performance_t;
+
+// === MAIN CONTEXT STRUCTURE ===
+typedef struct {
+    // Display properties
+    int width;
+    int height;
     visualmem_v2_mode_t mode;
-    int width, height;
-    uint32_t* framebuffer;
-
-    // Sécurité et thread safety
-    pthread_mutex_t context_mutex;      // Mutex principal contexte
-    pthread_rwlock_t allocations_lock;  // Lock liste allocations
-    allocation_metadata_t* allocations; // Liste allocations sécurisées
-
-    // Quotas et limites
-    context_limits_t limits;
-
-    // Monitoring sécurité
-    security_monitor_t security;
-
-    // Audit trail
-    audit_entry_t* audit_trail;
-    int audit_count;
-    int audit_capacity;
-    pthread_mutex_t audit_mutex;
-
-    // État système
-    bool autonomous_mode;
-    bool initialized;
-    uint32_t context_id;                // ID unique contexte
-    char context_name[64];              // Nom contexte
+    visualmem_v2_backend_t backend;
+    visualmem_v2_pixel_format_t pixel_format;
+    
+    // Hardware contexts
+    visualmem_v2_x11_context_t x11;
+    visualmem_v2_opengl_context_t opengl;
+    visualmem_v2_framebuffer_context_t framebuffer;
+    visualmem_v2_hardware_caps_t hardware;
+    
+    // Memory management
+    void* video_memory;             // Real video memory buffer
+    visualmem_v2_allocation_t allocations[VISUALMEM_V2_MAX_ALLOCATIONS];
+    int allocation_count;
+    
+    // Threading and synchronization
+    pthread_t display_thread;       // Display refresh thread
+    pthread_mutex_t context_mutex;  // Context protection
+    pthread_cond_t display_cond;    // Display synchronization
+    int display_thread_running;     // Thread control flag
+    
+    // Status and performance
+    int is_initialized;
+    int hardware_active;            // Hardware acceleration active
+    int display_active;             // Display is active
+    visualmem_v2_performance_t performance;
+    
+    // Configuration
+    int vsync_enabled;              // Vertical sync
+    int double_buffering;           // Double buffering
+    int refresh_rate_hz;            // Target refresh rate
+    int debug_mode;                 // Debug logging
 } visualmem_v2_context_t;
 
-// === API PRINCIPALE V2 ===
+// === CORE API FUNCTIONS ===
 
 /**
- * Initialise un contexte mémoire visuelle V2 sécurisé
+ * Initialize visual memory system with hardware detection
  */
-visualmem_v2_result_t visualmem_v2_init(
-    visualmem_v2_context_t* ctx,
-    visualmem_v2_mode_t mode,
-    int width,
-    int height,
-    const char* context_name
-);
+int visualmem_v2_init(visualmem_v2_context_t* ctx, 
+                      visualmem_v2_mode_t mode,
+                      int width, int height);
 
 /**
- * Allocation mémoire sécurisée avec validation complète
+ * Initialize with specific backend
  */
-void* visualmem_v2_alloc_secure(
-    visualmem_v2_context_t* ctx,
-    size_t size,
-    const char* label
-);
+int visualmem_v2_init_with_backend(visualmem_v2_context_t* ctx,
+                                   visualmem_v2_backend_t backend,
+                                   visualmem_v2_mode_t mode,
+                                   int width, int height);
 
 /**
- * Écriture sécurisée avec codes correcteurs
+ * Cleanup and release all resources
  */
-visualmem_v2_result_t visualmem_v2_write_secure(
-    visualmem_v2_context_t* ctx,
-    void* addr,
-    const void* data,
-    size_t size
-);
+void visualmem_v2_cleanup(visualmem_v2_context_t* ctx);
 
 /**
- * Lecture sécurisée avec vérification intégrité
+ * Get hardware capabilities
  */
-visualmem_v2_result_t visualmem_v2_read_secure(
-    visualmem_v2_context_t* ctx,
-    void* addr,
-    void* buffer,
-    size_t size
-);
+int visualmem_v2_get_hardware_caps(visualmem_v2_hardware_caps_t* caps);
+
+// === MEMORY ALLOCATION FUNCTIONS ===
 
 /**
- * Libération sécurisée avec effacement multi-passes
+ * Allocate visual memory with real screen coordinates
  */
-visualmem_v2_result_t visualmem_v2_free_secure(
-    visualmem_v2_context_t* ctx,
-    void* addr
-);
+void* visualmem_v2_alloc(visualmem_v2_context_t* ctx, 
+                         size_t size, 
+                         const char* label);
 
 /**
- * Mode autonome sécurisé avec audit complet
+ * Allocate visual memory at specific coordinates
  */
-visualmem_v2_result_t visualmem_v2_enter_autonomous_mode_secure(
-    visualmem_v2_context_t* ctx
-);
+void* visualmem_v2_alloc_at(visualmem_v2_context_t* ctx,
+                            int x, int y, int width, int height,
+                            const char* label);
 
 /**
- * Nettoyage complet et sécurisé du contexte
+ * Free visual memory allocation
  */
-visualmem_v2_result_t visualmem_v2_cleanup_secure(
-    visualmem_v2_context_t* ctx
-);
-
-// === API SÉCURITÉ ===
+int visualmem_v2_free(visualmem_v2_context_t* ctx, void* visual_addr);
 
 /**
- * Scan sécurité complet du contexte
+ * Reallocate visual memory (resize)
  */
-visualmem_v2_result_t visualmem_v2_security_scan(
-    visualmem_v2_context_t* ctx
-);
+void* visualmem_v2_realloc(visualmem_v2_context_t* ctx, 
+                           void* visual_addr, 
+                           size_t new_size);
+
+// === DATA OPERATIONS ===
 
 /**
- * Génère rapport sécurité détaillé
+ * Write data to visual memory (real pixels)
  */
-visualmem_v2_result_t visualmem_v2_generate_security_report(
-    visualmem_v2_context_t* ctx,
-    char* report_buffer,
-    size_t buffer_size
-);
+int visualmem_v2_write(visualmem_v2_context_t* ctx, 
+                       void* visual_addr, 
+                       const void* data, 
+                       size_t size);
 
 /**
- * Active/désactive protection anti-screenshot
+ * Read data from visual memory (real pixels)
  */
-visualmem_v2_result_t visualmem_v2_toggle_screenshot_protection(
-    visualmem_v2_context_t* ctx,
-    bool enable
-);
+int visualmem_v2_read(visualmem_v2_context_t* ctx, 
+                      void* visual_addr, 
+                      void* buffer, 
+                      size_t size);
 
 /**
- * Effacement sécurisé complet (multi-passes)
+ * Write pixel directly to screen coordinates
  */
-visualmem_v2_result_t visualmem_v2_secure_erase_all(
-    visualmem_v2_context_t* ctx
-);
+int visualmem_v2_write_pixel(visualmem_v2_context_t* ctx, 
+                             int x, int y, 
+                             uint32_t color);
 
 /**
- * Export audit trail chiffré
+ * Read pixel directly from screen coordinates
  */
-visualmem_v2_result_t visualmem_v2_export_audit_trail(
-    visualmem_v2_context_t* ctx,
-    const char* filename,
-    const char* encryption_key
-);
-
-// === API DIAGNOSTIQUES ===
+uint32_t visualmem_v2_read_pixel(visualmem_v2_context_t* ctx, 
+                                 int x, int y);
 
 /**
- * Test intégrité complet du système
+ * Write image data to visual memory
  */
-visualmem_v2_result_t visualmem_v2_integrity_test(
-    visualmem_v2_context_t* ctx
-);
+int visualmem_v2_write_image(visualmem_v2_context_t* ctx,
+                             void* visual_addr,
+                             const void* image_data,
+                             int width, int height,
+                             visualmem_v2_pixel_format_t format);
+
+// === DISPLAY CONTROL ===
 
 /**
- * Benchmark performance sécurisé
+ * Force display refresh/update
  */
-visualmem_v2_result_t visualmem_v2_benchmark_secure(
-    visualmem_v2_context_t* ctx,
-    char* results_buffer,
-    size_t buffer_size
-);
+int visualmem_v2_refresh_display(visualmem_v2_context_t* ctx);
 
 /**
- * Statistiques détaillées utilisation
+ * Set display refresh rate
  */
-visualmem_v2_result_t visualmem_v2_get_statistics(
-    visualmem_v2_context_t* ctx,
-    char* stats_buffer,
-    size_t buffer_size
-);
-
-// === FONCTIONS UTILITAIRES ===
+int visualmem_v2_set_refresh_rate(visualmem_v2_context_t* ctx, int hz);
 
 /**
- * Convertit code erreur en string lisible
+ * Enable/disable vsync
  */
-const char* visualmem_v2_error_string(visualmem_v2_result_t result);
+int visualmem_v2_set_vsync(visualmem_v2_context_t* ctx, int enabled);
 
 /**
- * Version et informations build
+ * Take screenshot of current visual memory
  */
-const char* visualmem_v2_get_version_info(void);
+int visualmem_v2_screenshot(visualmem_v2_context_t* ctx, 
+                            const char* filename);
+
+// === PERFORMANCE AND MONITORING ===
 
 /**
- * Test compatibilité système
+ * Get performance statistics
  */
-bool visualmem_v2_system_compatible(void);
+int visualmem_v2_get_performance(visualmem_v2_context_t* ctx,
+                                visualmem_v2_performance_t* perf);
+
+/**
+ * Reset performance counters
+ */
+void visualmem_v2_reset_performance(visualmem_v2_context_t* ctx);
+
+/**
+ * Get memory usage statistics
+ */
+int visualmem_v2_get_memory_stats(visualmem_v2_context_t* ctx,
+                                  size_t* allocated,
+                                  size_t* peak,
+                                  int* fragmentation);
+
+// === UTILITY FUNCTIONS ===
+
+/**
+ * Convert RGB to system pixel format
+ */
+uint32_t visualmem_v2_rgb_to_pixel(visualmem_v2_context_t* ctx,
+                                   uint8_t r, uint8_t g, uint8_t b);
+
+/**
+ * Convert pixel to RGB
+ */
+void visualmem_v2_pixel_to_rgb(visualmem_v2_context_t* ctx,
+                               uint32_t pixel,
+                               uint8_t* r, uint8_t* g, uint8_t* b);
+
+/**
+ * Get error string
+ */
+const char* visualmem_v2_get_error_string(visualmem_v2_error_t error);
+
+/**
+ * Enable debug mode
+ */
+void visualmem_v2_set_debug_mode(visualmem_v2_context_t* ctx, int enabled);
+
+// === THREAD SAFETY ===
+
+/**
+ * Lock context for thread-safe operations
+ */
+int visualmem_v2_lock(visualmem_v2_context_t* ctx);
+
+/**
+ * Unlock context
+ */
+int visualmem_v2_unlock(visualmem_v2_context_t* ctx);
 
 #endif // LIBVISUALMEM_V2_H
