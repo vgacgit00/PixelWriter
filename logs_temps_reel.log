@@ -1,0 +1,6 @@
+[2025-08-05 21:03:04.168410] [VALIDATION] [START] [full_suite=true] [STARTED] [rss=5640KB,cpu_time=0.000s,ctx_switches=0]
+[2025-08-05 21:03:04.170064] [HARDWARE_DETECTION] [GET_CAPABILITIES] [detection_time=1605us] [SUCCESS] [rss=5640KB,cpu_time=0.000s,ctx_switches=7]
+[2025-08-05 21:03:04.170082] [HARDWARE_CAPS] [DETECTED] [x11=1,opengl=1,fb=0,drm=0,gpu=Software Renderer] [SUCCESS] [rss=5640KB,cpu_time=0.000s,ctx_switches=7]
+[2025-08-05 21:03:04.172110] [X11_CONNECTION] [INIT_CONTEXT] [init_time=1911us,width=640,height=480] [SUCCESS] [rss=5640KB,cpu_time=0.001s,ctx_switches=22]
+[2025-08-05 21:03:04.172134] [X11_DISPLAY] [PROPERTIES] [backend=3,display_active=1,hardware_active=1] [SUCCESS] [rss=5640KB,cpu_time=0.001s,ctx_switches=22]
+[2025-08-05 21:03:04.173022] [X11_DISPLAY] [REFRESH] [refresh_time=879us] [SUCCESS] [rss=5640KB,cpu_time=0.001s,ctx_switches=22]
