@@ -1,0 +1,308 @@
+# Makefile for LibVisualMem v2.0 - Hardware Edition
+# ===============================================
+# 
+# Real hardware implementation with X11, OpenGL, and framebuffer support
+# Includes all necessary dependencies for authentic visual memory operations
+
+# === COMPILER CONFIGURATION ===
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -g -O2 -fPIC
+LDFLAGS = -pthread
+
+# === X11 AND GRAPHICS LIBRARIES ===
+X11_CFLAGS = $(shell pkg-config --cflags x11 2>/dev/null || echo "-I/usr/include/X11")
+X11_LIBS = $(shell pkg-config --libs x11 2>/dev/null || echo "-lX11")
+
+# OpenGL libraries (optional)
+GL_LIBS = -lGL -lGLU 2>/dev/null || true
+
+# === SYSTEM LIBRARIES ===
+SYS_LIBS = -ldl -lm
+
+# === SOURCE FILES ===
+LIB_SOURCES = libvisualmem_v2.c hardware_interface.c
+LIB_HEADERS = libvisualmem_v2.h
+LIB_OBJECTS = $(LIB_SOURCES:.c=.o)
+
+# === DEMO AND TEST FILES ===
+DEMO_SOURCE = demo_hardware_v2.c
+DEMO_TARGET = demo_hardware_v2
+
+# === LIBRARY TARGETS ===
+STATIC_LIB = libvisualmem_v2.a
+SHARED_LIB = libvisualmem_v2.so
+
+# === BUILD TARGETS ===
+
+.PHONY: all clean install uninstall demo test help hardware-check
+
+all: hardware-check $(STATIC_LIB) $(SHARED_LIB) $(DEMO_TARGET)
+	@echo "================================================================"
+	@echo "✅ LibVisualMem v2.0 Hardware Edition build completed!"
+	@echo "================================================================"
+	@echo "Built libraries:"
+	@echo "  📚 Static library: $(STATIC_LIB)"
+	@echo "  📚 Shared library: $(SHARED_LIB)"
+	@echo "  🎯 Hardware demo:  $(DEMO_TARGET)"
+	@echo ""
+	@echo "To run the demo: ./$(DEMO_TARGET)"
+	@echo "To install system-wide: make install (requires sudo)"
+	@echo "================================================================"
+
+# === HARDWARE DETECTION ===
+hardware-check:
+	@echo "================================================================"
+	@echo "🔍 Checking hardware requirements for LibVisualMem v2.0..."
+	@echo "================================================================"
+	@echo -n "X11 development libraries: "
+	@if pkg-config --exists x11 2>/dev/null; then \
+		echo "✅ Found ($(shell pkg-config --modversion x11))"; \
+	elif [ -f "/usr/include/X11/Xlib.h" ]; then \
+		echo "✅ Found (headers available)"; \
+	else \
+		echo "❌ Missing - install libx11-dev or libX11-devel"; \
+	fi
+	@echo -n "OpenGL libraries: "
+	@if [ -f "/usr/lib/x86_64-linux-gnu/libGL.so" ] || [ -f "/usr/lib64/libGL.so" ] || [ -f "/usr/lib/libGL.so" ]; then \
+		echo "✅ Found"; \
+	else \
+		echo "⚠️  Not found - OpenGL acceleration disabled"; \
+	fi
+	@echo -n "Framebuffer device: "
+	@if [ -c "/dev/fb0" ]; then \
+		echo "✅ Found (/dev/fb0)"; \
+	else \
+		echo "⚠️  Not found - framebuffer backend disabled"; \
+	fi
+	@echo -n "DRM devices: "
+	@if [ -d "/dev/dri" ] && [ -n "$$(ls /dev/dri/ 2>/dev/null)" ]; then \
+		echo "✅ Found ($$(ls /dev/dri/ | wc -l) devices)"; \
+	else \
+		echo "⚠️  Not found - DRM backend disabled"; \
+	fi
+	@echo -n "Virtual display (Xvfb): "
+	@if pgrep -f "Xvfb" >/dev/null 2>&1; then \
+		echo "✅ Running"; \
+	elif command -v Xvfb >/dev/null 2>&1; then \
+		echo "⚠️  Available but not running"; \
+	else \
+		echo "⚠️  Not installed"; \
+	fi
+	@echo "================================================================"
+
+# === LIBRARY COMPILATION ===
+
+%.o: %.c $(LIB_HEADERS)
+	@echo "🔨 Compiling $< with hardware support..."
+	$(CC) $(CFLAGS) $(X11_CFLAGS) -c $< -o $@
+
+$(STATIC_LIB): $(LIB_OBJECTS)
+	@echo "📦 Creating static library: $(STATIC_LIB)"
+	ar rcs $@ $^
+	@echo "✅ Static library created successfully"
+
+$(SHARED_LIB): $(LIB_OBJECTS)
+	@echo "🔗 Creating shared library: $(SHARED_LIB)"
+	$(CC) -shared $(LDFLAGS) -o $@ $^ $(X11_LIBS) $(GL_LIBS) $(SYS_LIBS)
+	@echo "✅ Shared library created successfully"
+
+# === DEMO COMPILATION ===
+
+$(DEMO_TARGET): $(DEMO_SOURCE) $(STATIC_LIB)
+	@echo "🎯 Building hardware demonstration: $(DEMO_TARGET)"
+	$(CC) $(CFLAGS) $(X11_CFLAGS) -o $@ $< $(STATIC_LIB) $(X11_LIBS) $(GL_LIBS) $(SYS_LIBS) $(LDFLAGS)
+	@echo "✅ Hardware demo built successfully"
+
+# === INSTALLATION ===
+
+install: $(STATIC_LIB) $(SHARED_LIB) $(LIB_HEADERS)
+	@echo "📥 Installing LibVisualMem v2.0 system-wide..."
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "❌ Installation requires root privileges. Use: sudo make install"; \
+		exit 1; \
+	fi
+	
+	# Create directories
+	install -d /usr/local/lib
+	install -d /usr/local/include
+	install -d /usr/local/bin
+	
+	# Install libraries
+	install -m 644 $(STATIC_LIB) /usr/local/lib/
+	install -m 755 $(SHARED_LIB) /usr/local/lib/
+	
+	# Install headers
+	install -m 644 $(LIB_HEADERS) /usr/local/include/
+	
+	# Install demo (optional)
+	if [ -f "$(DEMO_TARGET)" ]; then \
+		install -m 755 $(DEMO_TARGET) /usr/local/bin/visualmem-demo-v2; \
+	fi
+	
+	# Update library cache
+	ldconfig
+	
+	@echo "✅ LibVisualMem v2.0 installed successfully!"
+	@echo "   Libraries: /usr/local/lib/"
+	@echo "   Headers:   /usr/local/include/"
+	@echo "   Demo:      /usr/local/bin/visualmem-demo-v2"
+
+uninstall:
+	@echo "📤 Uninstalling LibVisualMem v2.0..."
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "❌ Uninstallation requires root privileges. Use: sudo make uninstall"; \
+		exit 1; \
+	fi
+	
+	rm -f /usr/local/lib/$(STATIC_LIB)
+	rm -f /usr/local/lib/$(SHARED_LIB)
+	rm -f /usr/local/include/libvisualmem_v2.h
+	rm -f /usr/local/bin/visualmem-demo-v2
+	ldconfig
+	
+	@echo "✅ LibVisualMem v2.0 uninstalled successfully"
+
+# === TESTING ===
+
+demo: $(DEMO_TARGET)
+	@echo "🚀 Running LibVisualMem v2.0 Hardware Demonstration..."
+	@echo "================================================================"
+	./$(DEMO_TARGET)
+
+test: $(DEMO_TARGET)
+	@echo "🧪 Running automated tests..."
+	@echo "================================================================"
+	@echo "Testing hardware detection..."
+	./$(DEMO_TARGET) 1
+	@echo ""
+	@echo "Testing pixel manipulation..."
+	./$(DEMO_TARGET) 2
+	@echo ""
+	@echo "Testing memory operations..."
+	./$(DEMO_TARGET) 3
+	@echo ""
+	@echo "Testing performance..."
+	./$(DEMO_TARGET) 4
+	@echo ""
+	@echo "Testing backends..."
+	./$(DEMO_TARGET) 5
+	@echo "================================================================"
+	@echo "✅ All tests completed"
+
+# === DEVELOPMENT TARGETS ===
+
+debug: CFLAGS += -DDEBUG -g3 -O0 -fsanitize=address -fsanitize=undefined
+debug: LDFLAGS += -fsanitize=address -fsanitize=undefined
+debug: all
+	@echo "🐛 Debug build completed with AddressSanitizer and UBSan"
+
+profile: CFLAGS += -pg -O2
+profile: LDFLAGS += -pg
+profile: all
+	@echo "📊 Profile build completed (use gprof for analysis)"
+
+analyze: $(LIB_SOURCES) $(LIB_HEADERS)
+	@echo "🔍 Running static analysis..."
+	@if command -v cppcheck >/dev/null 2>&1; then \
+		cppcheck --enable=all --std=c99 $(LIB_SOURCES); \
+	else \
+		echo "⚠️  cppcheck not found, skipping static analysis"; \
+	fi
+	@if command -v clang-tidy >/dev/null 2>&1; then \
+		clang-tidy $(LIB_SOURCES) -- $(CFLAGS) $(X11_CFLAGS); \
+	else \
+		echo "⚠️  clang-tidy not found, skipping additional analysis"; \
+	fi
+
+# === VIRTUAL DISPLAY SETUP ===
+
+setup-xvfb:
+	@echo "🖥️  Setting up virtual display (Xvfb)..."
+	@if ! command -v Xvfb >/dev/null 2>&1; then \
+		echo "❌ Xvfb not found. Install with:"; \
+		echo "   Ubuntu/Debian: sudo apt-get install xvfb"; \
+		echo "   CentOS/RHEL:   sudo yum install xorg-x11-server-Xvfb"; \
+		exit 1; \
+	fi
+	
+	@if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then \
+		echo "Starting Xvfb on display :99..."; \
+		Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset & \
+		sleep 2; \
+		echo "✅ Xvfb started successfully"; \
+	else \
+		echo "✅ Xvfb already running on display :99"; \
+	fi
+	
+	@export DISPLAY=:99 && echo "✅ DISPLAY set to :99"
+	@echo "To use: export DISPLAY=:99"
+
+stop-xvfb:
+	@echo "🛑 Stopping virtual display..."
+	@pkill -f "Xvfb :99" || true
+	@echo "✅ Xvfb stopped"
+
+# === CLEANUP ===
+
+clean:
+	@echo "🧹 Cleaning build artifacts..."
+	rm -f $(LIB_OBJECTS)
+	rm -f $(STATIC_LIB) $(SHARED_LIB)
+	rm -f $(DEMO_TARGET)
+	rm -f *.o *.a *.so
+	rm -f core gmon.out
+	@echo "✅ Cleanup completed"
+
+distclean: clean
+	@echo "🧹 Deep cleaning..."
+	rm -f *~ *.bak *.tmp
+	rm -rf build/ dist/
+	@echo "✅ Deep cleanup completed"
+
+# === HELP ===
+
+help:
+	@echo "================================================================"
+	@echo "            LibVisualMem v2.0 - Hardware Edition"
+	@echo "================================================================"
+	@echo ""
+	@echo "🎯 Main targets:"
+	@echo "  all           - Build everything (libraries + demo)"
+	@echo "  demo          - Build and run hardware demonstration"
+	@echo "  test          - Run automated test suite"
+	@echo "  install       - Install system-wide (requires sudo)"
+	@echo "  uninstall     - Remove system installation (requires sudo)"
+	@echo ""
+	@echo "🔧 Development targets:"
+	@echo "  debug         - Build with debug symbols and sanitizers"
+	@echo "  profile       - Build with profiling support"
+	@echo "  analyze       - Run static code analysis"
+	@echo ""
+	@echo "🖥️  Display targets:"
+	@echo "  setup-xvfb    - Start virtual display (Xvfb)"
+	@echo "  stop-xvfb     - Stop virtual display"
+	@echo ""
+	@echo "🧹 Cleanup targets:"
+	@echo "  clean         - Remove build artifacts"
+	@echo "  distclean     - Deep cleanup"
+	@echo ""
+	@echo "📋 Information targets:"
+	@echo "  hardware-check - Check hardware requirements"
+	@echo "  help          - Show this help"
+	@echo ""
+	@echo "📚 Usage examples:"
+	@echo "  make                    # Build everything"
+	@echo "  make demo               # Run demonstration"
+	@echo "  make setup-xvfb && make demo  # Setup virtual display and run"
+	@echo "  sudo make install       # Install system-wide"
+	@echo "  make debug              # Debug build"
+	@echo ""
+	@echo "🔗 Dependencies:"
+	@echo "  Required: libx11-dev, pthread"
+	@echo "  Optional: libgl-dev, xvfb, cppcheck, clang-tidy"
+	@echo "================================================================"
+
+# === SPECIAL TARGETS ===
+
+.SUFFIXES: .c .o .h
+.DEFAULT_GOAL := all

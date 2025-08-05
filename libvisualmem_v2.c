@@ -1,666 +1,691 @@
 /**
- * LIBVISUALMEM V2.0 - IMPLÉMENTATION SÉCURISÉE
- * ============================================
+ * LibVisualMem v2.0 - Hardware-Native Implementation
+ * =================================================
  * 
- * Implémentation complète avec toutes les corrections de sécurité
- * et optimisations identifiées par les audits Red Team.
+ * Real hardware implementation using X11, OpenGL, and framebuffer
+ * for authentic visual memory operations on physical displays.
  */
+
+#define _GNU_SOURCE
 
 #include "libvisualmem_v2.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <errno.h>
-#include <limits.h>
+#include <time.h>
 #include <assert.h>
+#include <sys/time.h>
+#include <unistd.h>
 
-// === VARIABLES GLOBALES SÉCURISÉES ===
-static pthread_mutex_t g_global_mutex = PTHREAD_MUTEX_INITIALIZER;
-static uint32_t g_next_context_id = 1;
-static int g_total_contexts = 0;
-static bool g_security_initialized = false;
+// External hardware interface functions
+extern int visualmem_v2_detect_hardware(visualmem_v2_hardware_caps_t* caps);
+extern visualmem_v2_backend_t visualmem_v2_select_best_backend(const visualmem_v2_hardware_caps_t* caps);
+extern int visualmem_v2_init_hardware_backend(visualmem_v2_context_t* ctx);
+extern void visualmem_v2_cleanup_hardware_backend(visualmem_v2_context_t* ctx);
+extern int visualmem_v2_x11_write_pixel(visualmem_v2_context_t* ctx, int x, int y, uint32_t color);
+extern uint32_t visualmem_v2_x11_read_pixel(visualmem_v2_context_t* ctx, int x, int y);
+extern int visualmem_v2_x11_refresh(visualmem_v2_context_t* ctx);
 
-// === UTILITAIRES SÉCURISÉS ===
+// === INTERNAL CONSTANTS ===
+#define VISUALMEM_V2_MAGIC_HEADER 0x56495355  // "VISU" in hex
+#define VISUALMEM_V2_BYTE_SPACING_X 10        // 8 bits + 2 markers
+#define VISUALMEM_V2_BYTE_SPACING_Y 2         // Vertical spacing
+#define VISUALMEM_V2_MEMORY_START_X 20        // Skip header area
+#define VISUALMEM_V2_MEMORY_START_Y 20
 
-static uint64_t get_precise_timestamp(void) {
+// === UTILITY FUNCTIONS ===
+
+static uint64_t get_timestamp_us(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
-static uint32_t calculate_secure_hash(const void* data, size_t size) {
-    // Hash simple mais efficace pour intégrité
-    uint32_t hash = 0x811C9DC5; // FNV-1a offset basis
+static uint32_t calculate_checksum(const void* data, size_t size) {
     const uint8_t* bytes = (const uint8_t*)data;
-
+    uint32_t checksum = 0;
     for (size_t i = 0; i < size; i++) {
-        hash ^= bytes[i];
-        hash *= 0x01000193; // FNV-1a prime
+        checksum = (checksum << 1) ^ bytes[i];
     }
-
-    return hash;
+    return checksum;
 }
 
-static void secure_random_fill(void* buffer, size_t size) {
-    // Générateur sécurisé pour effacement
-    uint8_t* bytes = (uint8_t*)buffer;
-    for (size_t i = 0; i < size; i++) {
-        bytes[i] = (uint8_t)(rand() ^ (rand() >> 8) ^ (i & 0xFF));
-    }
+// Suppress unused function warning for now
+__attribute__((unused)) static void* suppress_unused_warning = (void*)calculate_checksum;
+
+// === COORDINATE CONVERSION ===
+
+static inline void* coord_to_addr(int x, int y) {
+    return (void*)((uintptr_t)((y << 16) | x));
 }
 
-static bool validate_allocation_size(size_t size) {
-    return (size > 0 && size <= MAX_ALLOCATION_SIZE);
+static inline void addr_to_coord(void* addr, int* x, int* y) {
+    uintptr_t val = (uintptr_t)addr;
+    *x = val & 0xFFFF;
+    *y = (val >> 16) & 0xFFFF;
 }
 
-static bool check_quota_limits(visualmem_v2_context_t* ctx, size_t additional_size) {
-    if (!ctx) return false;
-
-    return (ctx->limits.current_allocations < MAX_ALLOCATIONS_PER_CONTEXT &&
-            ctx->limits.current_total_memory + additional_size <= MAX_TOTAL_MEMORY_PER_CONTEXT);
+static void calculate_byte_position(int byte_index, int* x, int* y, int width) {
+    int bytes_per_row = (width - VISUALMEM_V2_MEMORY_START_X) / VISUALMEM_V2_BYTE_SPACING_X;
+    if (bytes_per_row <= 0) bytes_per_row = 1;
+    
+    int row = byte_index / bytes_per_row;
+    int col = byte_index % bytes_per_row;
+    
+    *x = VISUALMEM_V2_MEMORY_START_X + (col * VISUALMEM_V2_BYTE_SPACING_X);
+    *y = VISUALMEM_V2_MEMORY_START_Y + (row * VISUALMEM_V2_BYTE_SPACING_Y);
 }
 
-// === CODES CORRECTEURS D'ERREURS (ECC) ===
+// === DISPLAY REFRESH THREAD ===
 
-static void generate_ecc_code(const uint8_t* data, uint8_t* ecc_code) {
-    // Implémentation Reed-Solomon simplifiée
-    memset(ecc_code, 0, ECC_CODE_SIZE);
-
-    for (int i = 0; i < ECC_BLOCK_SIZE; i++) {
-        uint8_t byte = data[i];
-        for (int j = 0; j < ECC_CODE_SIZE; j++) {
-            ecc_code[j] ^= byte;
-            byte = (byte << 1) | (byte >> 7); // Rotation
+static void* display_refresh_thread(void* arg) {
+    visualmem_v2_context_t* ctx = (visualmem_v2_context_t*)arg;
+    
+    printf("[DISPLAY] Refresh thread started (target: %d Hz)\n", ctx->refresh_rate_hz);
+    
+    int frame_time_us = 1000000 / ctx->refresh_rate_hz;
+    uint64_t frame_count = 0;
+    uint64_t start_time = get_timestamp_us();
+    
+    while (ctx->display_thread_running) {
+        uint64_t frame_start = get_timestamp_us();
+        
+        // Refresh display based on backend
+        if (ctx->backend == VISUALMEM_V2_BACKEND_X11 || 
+            ctx->backend == VISUALMEM_V2_BACKEND_OPENGL) {
+            visualmem_v2_x11_refresh(ctx);
+        }
+        
+        frame_count++;
+        ctx->performance.display_refreshes = frame_count;
+        
+        // Calculate frame rate
+        uint64_t elapsed = get_timestamp_us() - start_time;
+        if (elapsed > 0) {
+            ctx->performance.frame_rate = (double)frame_count * 1000000.0 / elapsed;
+        }
+        
+        // Sleep until next frame
+        uint64_t frame_end = get_timestamp_us();
+        int frame_duration = frame_end - frame_start;
+        
+        if (frame_duration < frame_time_us) {
+            usleep(frame_time_us - frame_duration);
         }
     }
+    
+    printf("[DISPLAY] Refresh thread stopped\n");
+    return NULL;
 }
 
-static bool verify_and_correct_ecc(uint8_t* data, const uint8_t* ecc_code) {
-    uint8_t calculated_ecc[ECC_CODE_SIZE];
-    generate_ecc_code(data, calculated_ecc);
+// === CORE API IMPLEMENTATION ===
 
-    // Vérification intégrité
-    bool corrupted = false;
-    for (int i = 0; i < ECC_CODE_SIZE; i++) {
-        if (calculated_ecc[i] != ecc_code[i]) {
-            corrupted = true;
+int visualmem_v2_get_hardware_caps(visualmem_v2_hardware_caps_t* caps) {
+    return visualmem_v2_detect_hardware(caps);
+}
+
+int visualmem_v2_init(visualmem_v2_context_t* ctx, 
+                      visualmem_v2_mode_t mode,
+                      int width, int height) {
+    return visualmem_v2_init_with_backend(ctx, VISUALMEM_V2_BACKEND_AUTO, mode, width, height);
+}
+
+int visualmem_v2_init_with_backend(visualmem_v2_context_t* ctx,
+                                   visualmem_v2_backend_t backend,
+                                   visualmem_v2_mode_t mode,
+                                   int width, int height) {
+    if (!ctx) return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    
+    if (width < VISUALMEM_V2_MIN_WIDTH || width > VISUALMEM_V2_MAX_WIDTH ||
+        height < VISUALMEM_V2_MIN_HEIGHT || height > VISUALMEM_V2_MAX_HEIGHT) {
+        return VISUALMEM_V2_ERROR_INVALID_RESOLUTION;
+    }
+    
+    printf("[INIT] Initializing LibVisualMem v2.0...\n");
+    printf("[INIT] Resolution: %dx%d, Mode: %d, Backend: %d\n", width, height, mode, backend);
+    
+    // Initialize context
+    memset(ctx, 0, sizeof(visualmem_v2_context_t));
+    ctx->width = width;
+    ctx->height = height;
+    ctx->mode = mode;
+    ctx->backend = backend;
+    ctx->pixel_format = VISUALMEM_V2_PIXEL_RGBA32;
+    ctx->refresh_rate_hz = 60;
+    ctx->vsync_enabled = 1;
+    ctx->double_buffering = 1;
+    
+    // Initialize mutexes
+    if (pthread_mutex_init(&ctx->context_mutex, NULL) != 0) {
+        return VISUALMEM_V2_ERROR_THREAD_FAILED;
+    }
+    
+    if (pthread_cond_init(&ctx->display_cond, NULL) != 0) {
+        pthread_mutex_destroy(&ctx->context_mutex);
+        return VISUALMEM_V2_ERROR_THREAD_FAILED;
+    }
+    
+    // Detect hardware capabilities
+    int result = visualmem_v2_detect_hardware(&ctx->hardware);
+    if (result != VISUALMEM_V2_SUCCESS) {
+        printf("[INIT] ERROR: Hardware detection failed\n");
+        pthread_cond_destroy(&ctx->display_cond);
+        pthread_mutex_destroy(&ctx->context_mutex);
+        return result;
+    }
+    
+    // Select backend if auto
+    if (ctx->backend == VISUALMEM_V2_BACKEND_AUTO) {
+        ctx->backend = visualmem_v2_select_best_backend(&ctx->hardware);
+    }
+    
+    // Initialize hardware backend
+    result = visualmem_v2_init_hardware_backend(ctx);
+    if (result != VISUALMEM_V2_SUCCESS) {
+        printf("[INIT] ERROR: Hardware backend initialization failed\n");
+        pthread_cond_destroy(&ctx->display_cond);
+        pthread_mutex_destroy(&ctx->context_mutex);
+        return result;
+    }
+    
+    // Allocate video memory buffer
+    size_t video_memory_size = width * height * VISUALMEM_V2_BYTES_PER_PIXEL;
+    ctx->video_memory = malloc(video_memory_size);
+    if (!ctx->video_memory) {
+        printf("[INIT] ERROR: Failed to allocate video memory buffer\n");
+        visualmem_v2_cleanup_hardware_backend(ctx);
+        pthread_cond_destroy(&ctx->display_cond);
+        pthread_mutex_destroy(&ctx->context_mutex);
+        return VISUALMEM_V2_ERROR_OUT_OF_VIDEO_MEMORY;
+    }
+    
+    // Clear video memory
+    memset(ctx->video_memory, 0, video_memory_size);
+    
+    // Initialize allocations array mutexes
+    for (int i = 0; i < VISUALMEM_V2_MAX_ALLOCATIONS; i++) {
+        pthread_mutex_init(&ctx->allocations[i].mutex, NULL);
+    }
+    
+    // Start display refresh thread
+    ctx->display_thread_running = 1;
+    if (pthread_create(&ctx->display_thread, NULL, display_refresh_thread, ctx) != 0) {
+        printf("[INIT] WARNING: Failed to start display refresh thread\n");
+        ctx->display_thread_running = 0;
+    }
+    
+    ctx->is_initialized = 1;
+    ctx->hardware_active = 1;
+    ctx->display_active = 1;
+    
+    printf("[INIT] LibVisualMem v2.0 initialized successfully\n");
+    printf("[INIT] Backend: %d, Hardware: %s, Video Memory: %zu bytes\n", 
+           ctx->backend, ctx->hardware.gpu_model, video_memory_size);
+    
+    return VISUALMEM_V2_SUCCESS;
+}
+
+void visualmem_v2_cleanup(visualmem_v2_context_t* ctx) {
+    if (!ctx || !ctx->is_initialized) return;
+    
+    printf("[CLEANUP] Shutting down LibVisualMem v2.0...\n");
+    
+    // Stop display thread
+    ctx->display_thread_running = 0;
+    if (ctx->display_thread) {
+        pthread_join(ctx->display_thread, NULL);
+    }
+    
+    // Free all allocations
+    for (int i = 0; i < ctx->allocation_count; i++) {
+        if (ctx->allocations[i].is_active) {
+            visualmem_v2_free(ctx, ctx->allocations[i].visual_addr);
+        }
+    }
+    
+    // Cleanup hardware backend
+    visualmem_v2_cleanup_hardware_backend(ctx);
+    
+    // Free video memory
+    if (ctx->video_memory) {
+        free(ctx->video_memory);
+        ctx->video_memory = NULL;
+    }
+    
+    // Cleanup allocation mutexes
+    for (int i = 0; i < VISUALMEM_V2_MAX_ALLOCATIONS; i++) {
+        pthread_mutex_destroy(&ctx->allocations[i].mutex);
+    }
+    
+    // Cleanup context mutexes
+    pthread_cond_destroy(&ctx->display_cond);
+    pthread_mutex_destroy(&ctx->context_mutex);
+    
+    ctx->is_initialized = 0;
+    ctx->hardware_active = 0;
+    ctx->display_active = 0;
+    
+    printf("[CLEANUP] Cleanup completed\n");
+}
+
+// === MEMORY ALLOCATION FUNCTIONS ===
+
+void* visualmem_v2_alloc(visualmem_v2_context_t* ctx, size_t size, const char* label) {
+    if (!ctx || !ctx->is_initialized || size == 0) return NULL;
+    
+    pthread_mutex_lock(&ctx->context_mutex);
+    
+    if (ctx->allocation_count >= VISUALMEM_V2_MAX_ALLOCATIONS) {
+        pthread_mutex_unlock(&ctx->context_mutex);
+        return NULL;
+    }
+    
+    // Find free allocation slot
+    int slot = -1;
+    for (int i = 0; i < VISUALMEM_V2_MAX_ALLOCATIONS; i++) {
+        if (!ctx->allocations[i].is_active) {
+            slot = i;
             break;
         }
     }
+    
+    if (slot == -1) {
+        pthread_mutex_unlock(&ctx->context_mutex);
+        return NULL;
+    }
+    
+    // Calculate position for allocation
+    int bytes_per_row = (ctx->width - VISUALMEM_V2_MEMORY_START_X) / VISUALMEM_V2_BYTE_SPACING_X;
+    if (bytes_per_row <= 0) bytes_per_row = 1;
+    
+    int total_allocated_bytes = 0;
+    for (int i = 0; i < ctx->allocation_count; i++) {
+        if (ctx->allocations[i].is_active) {
+            total_allocated_bytes += ctx->allocations[i].size;
+        }
+    }
+    
+    int start_x, start_y;
+    calculate_byte_position(total_allocated_bytes, &start_x, &start_y, ctx->width);
+    
+    // Check if allocation fits on screen
+    int required_rows = (size + bytes_per_row - 1) / bytes_per_row;
+    if (start_y + (required_rows * VISUALMEM_V2_BYTE_SPACING_Y) >= ctx->height) {
+        pthread_mutex_unlock(&ctx->context_mutex);
+        return NULL; // Not enough screen space
+    }
+    
+    // Create allocation
+    visualmem_v2_allocation_t* alloc = &ctx->allocations[slot];
+    alloc->visual_addr = coord_to_addr(start_x, start_y);
+    alloc->size = size;
+    alloc->x = start_x;
+    alloc->y = start_y;
+    alloc->width = bytes_per_row * VISUALMEM_V2_BYTE_SPACING_X;
+    alloc->height = required_rows * VISUALMEM_V2_BYTE_SPACING_Y;
+    alloc->checksum = 0;
+    alloc->timestamp = get_timestamp_us();
+    alloc->is_active = 1;
+    
+    if (label) {
+        strncpy(alloc->label, label, sizeof(alloc->label) - 1);
+        alloc->label[sizeof(alloc->label) - 1] = '\0';
+    } else {
+        snprintf(alloc->label, sizeof(alloc->label), "alloc_%d", slot);
+    }
+    
+    ctx->allocation_count++;
+    ctx->performance.total_allocations++;
+    
+    pthread_mutex_unlock(&ctx->context_mutex);
+    
+    printf("[ALLOC] Allocated %zu bytes at (%d,%d) - %s\n", 
+           size, start_x, start_y, alloc->label);
+    
+    return alloc->visual_addr;
+}
 
-    if (corrupted) {
-        // Tentative correction simple (1 bit)
-        for (int byte_idx = 0; byte_idx < ECC_BLOCK_SIZE; byte_idx++) {
-            for (int bit_idx = 0; bit_idx < 8; bit_idx++) {
-                // Teste correction en flippant chaque bit
-                data[byte_idx] ^= (1 << bit_idx);
-                generate_ecc_code(data, calculated_ecc);
+void* visualmem_v2_alloc_at(visualmem_v2_context_t* ctx,
+                            int x, int y, int width, int height,
+                            const char* label) {
+    if (!ctx || !ctx->is_initialized) return NULL;
+    
+    if (x < 0 || y < 0 || x + width > ctx->width || y + height > ctx->height) {
+        return NULL;
+    }
+    
+    size_t size = width * height; // Simplified size calculation
+    return visualmem_v2_alloc(ctx, size, label);
+}
 
-                bool corrected = true;
-                for (int i = 0; i < ECC_CODE_SIZE; i++) {
-                    if (calculated_ecc[i] != ecc_code[i]) {
-                        corrected = false;
-                        break;
-                    }
-                }
+int visualmem_v2_free(visualmem_v2_context_t* ctx, void* visual_addr) {
+    if (!ctx || !ctx->is_initialized || !visual_addr) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    pthread_mutex_lock(&ctx->context_mutex);
+    
+    // Find allocation
+    int slot = -1;
+    for (int i = 0; i < VISUALMEM_V2_MAX_ALLOCATIONS; i++) {
+        if (ctx->allocations[i].is_active && 
+            ctx->allocations[i].visual_addr == visual_addr) {
+            slot = i;
+            break;
+        }
+    }
+    
+    if (slot == -1) {
+        pthread_mutex_unlock(&ctx->context_mutex);
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    visualmem_v2_allocation_t* alloc = &ctx->allocations[slot];
+    
+    printf("[FREE] Freeing %zu bytes at (%d,%d) - %s\n", 
+           alloc->size, alloc->x, alloc->y, alloc->label);
+    
+    // Clear visual area (set to black)
+    for (int y = alloc->y; y < alloc->y + alloc->height && y < ctx->height; y++) {
+        for (int x = alloc->x; x < alloc->x + alloc->width && x < ctx->width; x++) {
+            visualmem_v2_write_pixel(ctx, x, y, 0xFF000000); // Black
+        }
+    }
+    
+    // Mark as inactive
+    alloc->is_active = 0;
+    alloc->visual_addr = NULL;
+    alloc->size = 0;
+    
+    ctx->allocation_count--;
+    ctx->performance.total_deallocations++;
+    
+    pthread_mutex_unlock(&ctx->context_mutex);
+    
+    return VISUALMEM_V2_SUCCESS;
+}
 
-                if (corrected) {
-                    return true; // Correction réussie
-                }
+// === DATA OPERATIONS ===
 
-                // Restaure bit original
-                data[byte_idx] ^= (1 << bit_idx);
+int visualmem_v2_write_pixel(visualmem_v2_context_t* ctx, int x, int y, uint32_t color) {
+    if (!ctx || !ctx->is_initialized) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    if (x < 0 || x >= ctx->width || y < 0 || y >= ctx->height) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    int result = VISUALMEM_V2_SUCCESS;
+    
+    // Write to appropriate backend
+    switch (ctx->backend) {
+        case VISUALMEM_V2_BACKEND_X11:
+        case VISUALMEM_V2_BACKEND_OPENGL:
+            result = visualmem_v2_x11_write_pixel(ctx, x, y, color);
+            break;
+            
+        case VISUALMEM_V2_BACKEND_FRAMEBUFFER:
+            // Framebuffer write implementation would go here
+            result = VISUALMEM_V2_ERROR_HARDWARE_UNSUPPORTED;
+            break;
+            
+        default:
+            result = VISUALMEM_V2_ERROR_HARDWARE_UNSUPPORTED;
+            break;
+    }
+    
+    if (result == VISUALMEM_V2_SUCCESS) {
+        ctx->performance.pixel_operations++;
+    }
+    
+    return result;
+}
+
+uint32_t visualmem_v2_read_pixel(visualmem_v2_context_t* ctx, int x, int y) {
+    if (!ctx || !ctx->is_initialized) {
+        return 0;
+    }
+    
+    if (x < 0 || x >= ctx->width || y < 0 || y >= ctx->height) {
+        return 0;
+    }
+    
+    uint32_t color = 0;
+    
+    // Read from appropriate backend
+    switch (ctx->backend) {
+        case VISUALMEM_V2_BACKEND_X11:
+        case VISUALMEM_V2_BACKEND_OPENGL:
+            color = visualmem_v2_x11_read_pixel(ctx, x, y);
+            break;
+            
+        case VISUALMEM_V2_BACKEND_FRAMEBUFFER:
+            // Framebuffer read implementation would go here
+            break;
+            
+        default:
+            break;
+    }
+    
+    ctx->performance.pixel_operations++;
+    return color;
+}
+
+int visualmem_v2_write(visualmem_v2_context_t* ctx, 
+                       void* visual_addr, 
+                       const void* data, 
+                       size_t size) {
+    if (!ctx || !ctx->is_initialized || !visual_addr || !data || size == 0) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    uint64_t start_time = get_timestamp_us();
+    
+    int x, y;
+    addr_to_coord(visual_addr, &x, &y);
+    
+    const uint8_t* bytes = (const uint8_t*)data;
+    int byte_index = 0;
+    
+    // Encode each byte as pixels
+    for (size_t i = 0; i < size; i++) {
+        int byte_x, byte_y;
+        calculate_byte_position(byte_index, &byte_x, &byte_y, ctx->width);
+        
+        if (byte_x >= ctx->width - 10 || byte_y >= ctx->height - 2) {
+            break; // Out of screen space
+        }
+        
+        // Start marker (red)
+        visualmem_v2_write_pixel(ctx, byte_x, byte_y, 0xFFFF0000);
+        
+        // Encode 8 bits
+        uint8_t byte_value = bytes[i];
+        for (int bit = 0; bit < 8; bit++) {
+            uint8_t bit_value = (byte_value >> (7 - bit)) & 1;
+            uint32_t pixel_color = bit_value ? 0xFFFFFFFF : 0xFF000000; // White or black
+            visualmem_v2_write_pixel(ctx, byte_x + 1 + bit, byte_y, pixel_color);
+        }
+        
+        // End marker (green)
+        visualmem_v2_write_pixel(ctx, byte_x + 9, byte_y, 0xFF00FF00);
+        
+        byte_index++;
+    }
+    
+    uint64_t end_time = get_timestamp_us();
+    double duration_s = (end_time - start_time) / 1000000.0;
+    double speed_mbps = (size / (1024.0 * 1024.0)) / duration_s;
+    
+    ctx->performance.bytes_written += size;
+    if (ctx->performance.avg_write_speed_mbps == 0) {
+        ctx->performance.avg_write_speed_mbps = speed_mbps;
+    } else {
+        ctx->performance.avg_write_speed_mbps = 
+            (ctx->performance.avg_write_speed_mbps + speed_mbps) / 2.0;
+    }
+    
+    return VISUALMEM_V2_SUCCESS;
+}
+
+int visualmem_v2_read(visualmem_v2_context_t* ctx, 
+                      void* visual_addr, 
+                      void* buffer, 
+                      size_t size) {
+    if (!ctx || !ctx->is_initialized || !visual_addr || !buffer || size == 0) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    uint64_t start_time = get_timestamp_us();
+    
+    int x, y;
+    addr_to_coord(visual_addr, &x, &y);
+    
+    uint8_t* bytes = (uint8_t*)buffer;
+    int byte_index = 0;
+    
+    // Decode each byte from pixels
+    for (size_t i = 0; i < size; i++) {
+        int byte_x, byte_y;
+        calculate_byte_position(byte_index, &byte_x, &byte_y, ctx->width);
+        
+        if (byte_x >= ctx->width - 10 || byte_y >= ctx->height - 2) {
+            break; // Out of screen space
+        }
+        
+        uint8_t byte_value = 0;
+        
+        // Read 8 bits
+        for (int bit = 0; bit < 8; bit++) {
+            uint32_t pixel_color = visualmem_v2_read_pixel(ctx, byte_x + 1 + bit, byte_y);
+            
+            // Check if pixel represents bit 1 (white)
+            if ((pixel_color & 0x00FFFFFF) == 0x00FFFFFF) {
+                byte_value |= (1 << (7 - bit));
             }
         }
-        return false; // Correction échouée
+        
+        bytes[i] = byte_value;
+        byte_index++;
     }
-
-    return true; // Pas de corruption
-}
-
-// === AUDIT TRAIL ===
-
-static void log_security_event(visualmem_v2_context_t* ctx, 
-                              security_event_type_t type,
-                              security_severity_t severity,
-                              void* address,
-                              size_t size,
-                              const char* details) {
-    if (!ctx || !ctx->audit_trail) return;
-
-    pthread_mutex_lock(&ctx->audit_mutex);
-
-    if (ctx->audit_count >= ctx->audit_capacity) {
-        // Rotate audit trail (supprime les plus anciens)
-        memmove(ctx->audit_trail, 
-                ctx->audit_trail + 1,
-                (ctx->audit_capacity - 1) * sizeof(audit_entry_t));
-        ctx->audit_count--;
-    }
-
-    audit_entry_t* entry = &ctx->audit_trail[ctx->audit_count++];
-    entry->timestamp = get_precise_timestamp();
-    entry->event_type = type;
-    entry->severity = severity;
-    entry->process_id = getpid();
-    entry->user_id = getuid();
-    entry->address = address;
-    entry->size = size;
-    strncpy(entry->details, details ? details : "", sizeof(entry->details) - 1);
-    entry->details[sizeof(entry->details) - 1] = '\0';
-    entry->hash = calculate_secure_hash(entry, sizeof(*entry) - sizeof(entry->hash));
-
-    pthread_mutex_unlock(&ctx->audit_mutex);
-
-    // Alerte sécurité si critique
-    if (severity >= SEVERITY_HIGH) {
-        fprintf(stderr, "🚨 ALERT SÉCURITÉ: %s (Sévérité: %d)\n", 
-                entry->details, severity);
-    }
-}
-
-// === API PRINCIPALE V2 ===
-
-visualmem_v2_result_t visualmem_v2_init(visualmem_v2_context_t* ctx,
-                                        visualmem_v2_mode_t mode,
-                                        int width,
-                                        int height,
-                                        const char* context_name) {
-    if (!ctx || width <= 0 || height <= 0) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    pthread_mutex_lock(&g_global_mutex);
-
-    // Limite globale de contextes
-    if (g_total_contexts >= 100) {
-        pthread_mutex_unlock(&g_global_mutex);
-        return VISUALMEM_V2_ERROR_QUOTA_EXCEEDED;
-    }
-
-    // Initialisation contexte
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->mode = mode;
-    ctx->width = width;
-    ctx->height = height;
-    ctx->context_id = g_next_context_id++;
-    g_total_contexts++;
-
-    if (context_name) {
-        strncpy(ctx->context_name, context_name, sizeof(ctx->context_name) - 1);
+    
+    uint64_t end_time = get_timestamp_us();
+    double duration_s = (end_time - start_time) / 1000000.0;
+    double speed_mbps = (size / (1024.0 * 1024.0)) / duration_s;
+    
+    ctx->performance.bytes_read += size;
+    if (ctx->performance.avg_read_speed_mbps == 0) {
+        ctx->performance.avg_read_speed_mbps = speed_mbps;
     } else {
-        snprintf(ctx->context_name, sizeof(ctx->context_name), "ctx_%u", ctx->context_id);
+        ctx->performance.avg_read_speed_mbps = 
+            (ctx->performance.avg_read_speed_mbps + speed_mbps) / 2.0;
     }
-
-    pthread_mutex_unlock(&g_global_mutex);
-
-    // Initialisation thread safety
-    if (pthread_mutex_init(&ctx->context_mutex, NULL) != 0 ||
-        pthread_mutex_init(&ctx->allocations_lock, NULL) != 0 ||
-        pthread_mutex_init(&ctx->audit_mutex, NULL) != 0) {
-        return VISUALMEM_V2_ERROR_THREAD_SAFETY;
-    }
-
-    // Allocation framebuffer sécurisé
-    size_t framebuffer_size = width * height * sizeof(uint32_t);
-    ctx->framebuffer = calloc(1, framebuffer_size);
-    if (!ctx->framebuffer) {
-        pthread_mutex_destroy(&ctx->context_mutex);
-        pthread_mutex_destroy(&ctx->allocations_lock);
-        pthread_mutex_destroy(&ctx->audit_mutex);
-        return VISUALMEM_V2_ERROR_OUT_OF_MEMORY;
-    }
-
-    // Initialisation audit trail
-    ctx->audit_capacity = AUDIT_TRAIL_MAX_ENTRIES;
-    ctx->audit_trail = calloc(ctx->audit_capacity, sizeof(audit_entry_t));
-    if (!ctx->audit_trail) {
-        free(ctx->framebuffer);
-        pthread_mutex_destroy(&ctx->context_mutex);
-        pthread_mutex_destroy(&ctx->allocations_lock);
-        pthread_mutex_destroy(&ctx->audit_mutex);
-        return VISUALMEM_V2_ERROR_OUT_OF_MEMORY;
-    }
-
-    // Initialisation limites
-    ctx->limits.creation_time = time(NULL);
-    ctx->limits.last_activity = ctx->limits.creation_time;
-
-    // Initialisation monitoring sécurité
-    ctx->security.last_security_scan = time(NULL);
-    ctx->security.screenshot_protection_active = true; // Activé par défaut
-
-    ctx->initialized = true;
-
-    log_security_event(ctx, SECURITY_EVENT_ALLOCATION, SEVERITY_LOW,
-                      NULL, 0, "Contexte initialisé avec succès");
-
+    
     return VISUALMEM_V2_SUCCESS;
 }
 
-void* visualmem_v2_alloc_secure(visualmem_v2_context_t* ctx,
-                               size_t size,
-                               const char* label) {
-    if (!ctx || !ctx->initialized || !validate_allocation_size(size)) {
-        if (ctx) {
-            log_security_event(ctx, SECURITY_EVENT_ALLOCATION, SEVERITY_MEDIUM,
-                              NULL, size, "Tentative allocation paramètres invalides");
-        }
-        return NULL;
-    }
+// === DISPLAY CONTROL ===
 
+int visualmem_v2_refresh_display(visualmem_v2_context_t* ctx) {
+    if (!ctx || !ctx->is_initialized) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    switch (ctx->backend) {
+        case VISUALMEM_V2_BACKEND_X11:
+        case VISUALMEM_V2_BACKEND_OPENGL:
+            return visualmem_v2_x11_refresh(ctx);
+            
+        default:
+            return VISUALMEM_V2_SUCCESS; // No-op for other backends
+    }
+}
+
+int visualmem_v2_set_refresh_rate(visualmem_v2_context_t* ctx, int hz) {
+    if (!ctx || hz <= 0 || hz > 240) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
+    ctx->refresh_rate_hz = hz;
+    printf("[DISPLAY] Refresh rate set to %d Hz\n", hz);
+    return VISUALMEM_V2_SUCCESS;
+}
+
+// === PERFORMANCE AND MONITORING ===
+
+int visualmem_v2_get_performance(visualmem_v2_context_t* ctx,
+                                visualmem_v2_performance_t* perf) {
+    if (!ctx || !perf) {
+        return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    }
+    
     pthread_mutex_lock(&ctx->context_mutex);
-
-    // Vérification quotas
-    if (!check_quota_limits(ctx, size)) {
-        pthread_mutex_unlock(&ctx->context_mutex);
-        log_security_event(ctx, SECURITY_EVENT_QUOTA_EXCEEDED, SEVERITY_HIGH,
-                          NULL, size, "Quota allocation dépassé");
-        return NULL;
-    }
-
-    // Allocation métadonnées
-    allocation_metadata_t* metadata = calloc(1, sizeof(allocation_metadata_t));
-    if (!metadata) {
-        pthread_mutex_unlock(&ctx->context_mutex);
-        return NULL;
-    }
-
-    // Allocation données avec padding pour ECC
-    size_t padded_size = ((size + ECC_BLOCK_SIZE - 1) / ECC_BLOCK_SIZE) * ECC_BLOCK_SIZE;
-    size_t total_size = padded_size + (padded_size / ECC_BLOCK_SIZE) * sizeof(secure_data_block_t);
-
-    void* address = calloc(1, total_size);
-    if (!address) {
-        free(metadata);
-        pthread_mutex_unlock(&ctx->context_mutex);
-        return NULL;
-    }
-
-    // Initialisation métadonnées
-    metadata->address = address;
-    metadata->size = size;
-    if (label) {
-        strncpy(metadata->label, label, sizeof(metadata->label) - 1);
-    }
-    pthread_mutex_init(&metadata->lock, NULL);
-    metadata->ref_count = 1;
-    metadata->is_free = false;
-    metadata->creation_time = time(NULL);
-    metadata->last_access_time = metadata->creation_time;
-    metadata->security_hash = calculate_secure_hash(metadata, 
-                                                   sizeof(*metadata) - sizeof(metadata->security_hash));
-
-    // Ajout à la liste des allocations
-    pthread_mutex_lock(&ctx->allocations_lock);
-    metadata->next = ctx->allocations;
-    ctx->allocations = metadata;
-    pthread_mutex_unlock(&ctx->allocations_lock);
-
-    // Mise à jour quotas
-    ctx->limits.current_allocations++;
-    ctx->limits.current_total_memory += size;
-    ctx->limits.last_activity = time(NULL);
-
+    *perf = ctx->performance;
     pthread_mutex_unlock(&ctx->context_mutex);
-
-    log_security_event(ctx, SECURITY_EVENT_ALLOCATION, SEVERITY_LOW,
-                      address, size, "Allocation sécurisée réussie");
-
-    return address;
-}
-
-visualmem_v2_result_t visualmem_v2_write_secure(visualmem_v2_context_t* ctx,
-                                               void* addr,
-                                               const void* data,
-                                               size_t size) {
-    if (!ctx || !ctx->initialized || !addr || !data || size == 0) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Trouve métadonnées allocation
-    pthread_mutex_lock(&ctx->allocations_lock);
-    allocation_metadata_t* metadata = ctx->allocations;
-    while (metadata && metadata->address != addr) {
-        metadata = metadata->next;
-    }
-
-    if (!metadata || metadata->is_free) {
-        pthread_mutex_unlock(&ctx->allocations_lock);
-        log_security_event(ctx, SECURITY_EVENT_WRITE, SEVERITY_HIGH,
-                          addr, size, "Tentative écriture adresse invalide");
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Vérification taille
-    if (size > metadata->size) {
-        pthread_mutex_unlock(&ctx->allocations_lock);
-        log_security_event(ctx, SECURITY_EVENT_WRITE, SEVERITY_CRITICAL,
-                          addr, size, "Tentative buffer overflow détectée");
-        return VISUALMEM_V2_ERROR_SECURITY_VIOLATION;
-    }
-
-    // Lock écriture exclusive
-    pthread_rwlock_wrlock(&metadata->lock);
-    pthread_mutex_unlock(&ctx->allocations_lock);
-
-    // Écriture avec codes correcteurs
-    const uint8_t* src_data = (const uint8_t*)data;
-    uint8_t* dest_data = (uint8_t*)addr;
-
-    for (size_t offset = 0; offset < size; offset += ECC_BLOCK_SIZE) {
-        size_t block_size = (size - offset < ECC_BLOCK_SIZE) ? (size - offset) : ECC_BLOCK_SIZE;
-
-        // Copie données
-        memcpy(dest_data + offset, src_data + offset, block_size);
-
-        // Padding si nécessaire
-        if (block_size < ECC_BLOCK_SIZE) {
-            memset(dest_data + offset + block_size, 0, ECC_BLOCK_SIZE - block_size);
-        }
-
-        // Génération code ECC (simulation - stocké séparément en production)
-        uint8_t ecc_code[ECC_CODE_SIZE];
-        generate_ecc_code(dest_data + offset, ecc_code);
-    }
-
-    // Mise à jour métadonnées
-    metadata->last_access_time = time(NULL);
-    metadata->security_hash = calculate_secure_hash(metadata,
-                                                   sizeof(*metadata) - sizeof(metadata->security_hash));
-
-    pthread_rwlock_unlock(&metadata->lock);
-
-    log_security_event(ctx, SECURITY_EVENT_WRITE, SEVERITY_LOW,
-                      addr, size, "Écriture sécurisée réussie");
-
+    
     return VISUALMEM_V2_SUCCESS;
 }
 
-visualmem_v2_result_t visualmem_v2_read_secure(visualmem_v2_context_t* ctx,
-                                              void* addr,
-                                              void* buffer,
-                                              size_t size) {
-    if (!ctx || !ctx->initialized || !addr || !buffer || size == 0) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Trouve métadonnées allocation
-    pthread_mutex_lock(&ctx->allocations_lock);
-    allocation_metadata_t* metadata = ctx->allocations;
-    while (metadata && metadata->address != addr) {
-        metadata = metadata->next;
-    }
-
-    if (!metadata || metadata->is_free) {
-        pthread_mutex_unlock(&ctx->allocations_lock);
-        log_security_event(ctx, SECURITY_EVENT_READ, SEVERITY_HIGH,
-                          addr, size, "Tentative lecture adresse invalide");
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Vérification taille
-    if (size > metadata->size) {
-        pthread_mutex_unlock(&ctx->allocations_lock);
-        log_security_event(ctx, SECURITY_EVENT_READ, SEVERITY_MEDIUM,
-                          addr, size, "Tentative lecture au-delà des limites");
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Lock lecture partagé
-    pthread_rwlock_rdlock(&metadata->lock);
-    pthread_mutex_unlock(&ctx->allocations_lock);
-
-    // Lecture avec vérification intégrité
-    uint8_t* src_data = (uint8_t*)addr;
-    bool integrity_ok = true;
-
-    for (size_t offset = 0; offset < size; offset += ECC_BLOCK_SIZE) {
-        size_t block_size = (size - offset < ECC_BLOCK_SIZE) ? (size - offset) : ECC_BLOCK_SIZE;
-
-        // Vérification ECC (simulation)
-        uint8_t temp_block[ECC_BLOCK_SIZE];
-        memcpy(temp_block, src_data + offset, ECC_BLOCK_SIZE);
-
-        // En production: vérifier avec codes ECC stockés
-        // Pour l'instant: simple vérification pattern
-
-        // Copie données vérifiées
-        memcpy((uint8_t*)buffer + offset, src_data + offset, block_size);
-    }
-
-    if (!integrity_ok) {
-        pthread_rwlock_unlock(&metadata->lock);
-        log_security_event(ctx, SECURITY_EVENT_CORRUPTION, SEVERITY_CRITICAL,
-                          addr, size, "Corruption données détectée");
-        return VISUALMEM_V2_ERROR_CORRUPTION_DETECTED;
-    }
-
-    // Mise à jour métadonnées
-    metadata->last_access_time = time(NULL);
-
-    pthread_rwlock_unlock(&metadata->lock);
-
-    log_security_event(ctx, SECURITY_EVENT_READ, SEVERITY_LOW,
-                      addr, size, "Lecture sécurisée réussie");
-
-    return VISUALMEM_V2_SUCCESS;
-}
-
-visualmem_v2_result_t visualmem_v2_free_secure(visualmem_v2_context_t* ctx,
-                                              void* addr) {
-    if (!ctx || !ctx->initialized || !addr) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
+void visualmem_v2_reset_performance(visualmem_v2_context_t* ctx) {
+    if (!ctx) return;
+    
     pthread_mutex_lock(&ctx->context_mutex);
-
-    // Trouve et retire métadonnées
-    pthread_mutex_lock(&ctx->allocations_lock);
-    allocation_metadata_t** current = &ctx->allocations;
-    allocation_metadata_t* metadata = NULL;
-
-    while (*current && (*current)->address != addr) {
-        current = &(*current)->next;
-    }
-
-    if (*current && !(*current)->is_free) {
-        metadata = *current;
-        *current = metadata->next;
-        metadata->is_free = true;
-    }
-
-    pthread_mutex_unlock(&ctx->allocations_lock);
-
-    if (!metadata) {
-        pthread_mutex_unlock(&ctx->context_mutex);
-        log_security_event(ctx, SECURITY_EVENT_FREE, SEVERITY_MEDIUM,
-                          addr, 0, "Tentative libération adresse invalide");
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
-
-    // Effacement sécurisé multi-passes
-    size_t total_size = metadata->size;
-
-    // Pass 1: Zéros
-    memset(addr, 0x00, total_size);
-
-    // Pass 2: Uns
-    memset(addr, 0xFF, total_size);
-
-    // Pass 3: Pattern aléatoire
-    secure_random_fill(addr, total_size);
-
-    // Pass 4: Zéros finaux
-    memset(addr, 0x00, total_size);
-
-    // Libération mémoire
-    free(addr);
-
-    // Nettoyage métadonnées
-    pthread_rwlock_destroy(&metadata->lock);
-    memset(metadata, 0, sizeof(*metadata)); // Effacement sécurisé métadonnées
-    free(metadata);
-
-    // Mise à jour quotas
-    ctx->limits.current_allocations--;
-    ctx->limits.current_total_memory -= total_size;
-    ctx->limits.last_activity = time(NULL);
-
+    memset(&ctx->performance, 0, sizeof(visualmem_v2_performance_t));
     pthread_mutex_unlock(&ctx->context_mutex);
-
-    log_security_event(ctx, SECURITY_EVENT_FREE, SEVERITY_LOW,
-                      addr, total_size, "Libération sécurisée réussie");
-
-    return VISUALMEM_V2_SUCCESS;
 }
 
-visualmem_v2_result_t visualmem_v2_cleanup_secure(visualmem_v2_context_t* ctx) {
-    if (!ctx || !ctx->initialized) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
-    }
+// === UTILITY FUNCTIONS ===
 
-    pthread_mutex_lock(&ctx->context_mutex);
-
-    // Libération sécurisée de toutes les allocations
-    pthread_mutex_lock(&ctx->allocations_lock);
-    allocation_metadata_t* current = ctx->allocations;
-
-    while (current) {
-        allocation_metadata_t* next = current->next;
-
-        if (!current->is_free) {
-            // Effacement sécurisé
-            memset(current->address, 0x00, current->size);
-            memset(current->address, 0xFF, current->size);
-            secure_random_fill(current->address, current->size);
-            memset(current->address, 0x00, current->size);
-
-            free(current->address);
-        }
-
-        pthread_rwlock_destroy(&current->lock);
-        memset(current, 0, sizeof(*current));
-        free(current);
-
-        current = next;
-    }
-
-    ctx->allocations = NULL;
-    pthread_mutex_unlock(&ctx->allocations_lock);
-
-    // Effacement sécurisé framebuffer
-    if (ctx->framebuffer) {
-        size_t framebuffer_size = ctx->width * ctx->height * sizeof(uint32_t);
-        memset(ctx->framebuffer, 0x00, framebuffer_size);
-        memset(ctx->framebuffer, 0xFF, framebuffer_size);
-        secure_random_fill(ctx->framebuffer, framebuffer_size);
-        memset(ctx->framebuffer, 0x00, framebuffer_size);
-        free(ctx->framebuffer);
-        ctx->framebuffer = NULL;
-    }
-
-    // Nettoyage audit trail
-    if (ctx->audit_trail) {
-        memset(ctx->audit_trail, 0, ctx->audit_capacity * sizeof(audit_entry_t));
-        free(ctx->audit_trail);
-        ctx->audit_trail = NULL;
-    }
-
-    // Destruction thread safety
-    pthread_mutex_destroy(&ctx->allocations_lock);
-    pthread_mutex_destroy(&ctx->audit_mutex);
-
-    ctx->initialized = false;
-
-    pthread_mutex_unlock(&ctx->context_mutex);
-    pthread_mutex_destroy(&ctx->context_mutex);
-
-    // Décrémente compteur global
-    pthread_mutex_lock(&g_global_mutex);
-    g_total_contexts--;
-    pthread_mutex_unlock(&g_global_mutex);
-
-    // Effacement final structure contexte
-    memset(ctx, 0, sizeof(*ctx));
-
-    return VISUALMEM_V2_SUCCESS;
+uint32_t visualmem_v2_rgb_to_pixel(visualmem_v2_context_t* ctx,
+                                   uint8_t r, uint8_t g, uint8_t b) {
+    (void)ctx; // Unused for now
+    return 0xFF000000 | (r << 16) | (g << 8) | b;
 }
 
-// === API UTILITAIRES ===
+void visualmem_v2_pixel_to_rgb(visualmem_v2_context_t* ctx,
+                               uint32_t pixel,
+                               uint8_t* r, uint8_t* g, uint8_t* b) {
+    (void)ctx; // Unused for now
+    if (r) *r = (pixel >> 16) & 0xFF;
+    if (g) *g = (pixel >> 8) & 0xFF;
+    if (b) *b = pixel & 0xFF;
+}
 
-const char* visualmem_v2_error_string(visualmem_v2_result_t result) {
-    switch (result) {
-        case VISUALMEM_V2_SUCCESS: return "Succès";
-        case VISUALMEM_V2_ERROR_INVALID_PARAMS: return "Paramètres invalides";
-        case VISUALMEM_V2_ERROR_OUT_OF_MEMORY: return "Mémoire insuffisante";
-        case VISUALMEM_V2_ERROR_QUOTA_EXCEEDED: return "Quota dépassé";
-        case VISUALMEM_V2_ERROR_SIZE_TOO_LARGE: return "Taille trop importante";
-        case VISUALMEM_V2_ERROR_CORRUPTION_DETECTED: return "Corruption détectée";
-        case VISUALMEM_V2_ERROR_THREAD_SAFETY: return "Erreur thread safety";
-        case VISUALMEM_V2_ERROR_SECURITY_VIOLATION: return "Violation sécurité";
-        default: return "Erreur inconnue";
+const char* visualmem_v2_get_error_string(visualmem_v2_error_t error) {
+    switch (error) {
+        case VISUALMEM_V2_SUCCESS: return "Success";
+        case VISUALMEM_V2_ERROR_INIT_FAILED: return "Initialization failed";
+        case VISUALMEM_V2_ERROR_DISPLAY_UNAVAILABLE: return "Display unavailable";
+        case VISUALMEM_V2_ERROR_HARDWARE_UNSUPPORTED: return "Hardware unsupported";
+        case VISUALMEM_V2_ERROR_OUT_OF_VIDEO_MEMORY: return "Out of video memory";
+        case VISUALMEM_V2_ERROR_INVALID_ADDRESS: return "Invalid address";
+        case VISUALMEM_V2_ERROR_ALLOCATION_FAILED: return "Allocation failed";
+        case VISUALMEM_V2_ERROR_DISPLAY_LOST: return "Display lost";
+        case VISUALMEM_V2_ERROR_OPENGL_FAILED: return "OpenGL failed";
+        case VISUALMEM_V2_ERROR_THREAD_FAILED: return "Thread failed";
+        case VISUALMEM_V2_ERROR_INVALID_RESOLUTION: return "Invalid resolution";
+        default: return "Unknown error";
     }
 }
 
-const char* visualmem_v2_get_version_info(void) {
-    return "LibVisualMem V2.0.0-SECURE - Edition Sécurisée avec Thread Safety, ECC, Audit Trail";
-}
-
-bool visualmem_v2_system_compatible(void) {
-    // Vérifications compatibilité système
-    return (sizeof(void*) >= 4 &&           // Architecture 32/64 bits
-            sizeof(uint32_t) == 4 &&        // Types corrects
-            sizeof(pthread_mutex_t) > 0);    // Support pthread
-}
-
-visualmem_v2_result_t visualmem_v2_generate_security_report(visualmem_v2_context_t* ctx,
-                                                           char* report_buffer,
-                                                           size_t buffer_size) {
-    if (!ctx || !ctx->initialized || !report_buffer || buffer_size == 0) {
-        return VISUALMEM_V2_ERROR_INVALID_PARAMS;
+void visualmem_v2_set_debug_mode(visualmem_v2_context_t* ctx, int enabled) {
+    if (ctx) {
+        ctx->debug_mode = enabled;
+        printf("[DEBUG] Debug mode %s\n", enabled ? "enabled" : "disabled");
     }
+}
 
-    pthread_mutex_lock(&ctx->context_mutex);
+// === THREAD SAFETY ===
 
-    int written = snprintf(report_buffer, buffer_size,
-        "=== RAPPORT SÉCURITÉ VISUALMEM V2 ===\n"
-        "Contexte: %s (ID: %u)\n"
-        "Mode: %d | Dimensions: %dx%d\n"
-        "\n=== STATISTIQUES ALLOCATIONS ===\n"
-        "Allocations actuelles: %d/%d\n"
-        "Mémoire utilisée: %zu/%zu bytes\n"
-        "Création: %s"
-        "Dernière activité: %s"
-        "\n=== MONITORING SÉCURITÉ ===\n"
-        "Tentatives overflow: %d\n"
-        "Corruptions détectées: %d\n"
-        "Anomalies temporelles: %d\n"
-        "Violations concurrence: %d\n"
-        "Patterns suspects: %d\n"
-        "Protection screenshot: %s\n"
-        "\n=== AUDIT TRAIL ===\n"
-        "Entrées audit: %d/%d\n",
+int visualmem_v2_lock(visualmem_v2_context_t* ctx) {
+    if (!ctx) return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    return pthread_mutex_lock(&ctx->context_mutex) == 0 ? 
+           VISUALMEM_V2_SUCCESS : VISUALMEM_V2_ERROR_THREAD_FAILED;
+}
 
-        ctx->context_name, ctx->context_id,
-        ctx->mode, ctx->width, ctx->height,
-        ctx->limits.current_allocations, MAX_ALLOCATIONS_PER_CONTEXT,
-        ctx->limits.current_total_memory, (size_t)MAX_TOTAL_MEMORY_PER_CONTEXT,
-        ctime(&ctx->limits.creation_time),
-        ctime(&ctx->limits.last_activity),
-        ctx->security.buffer_overflow_attempts,
-        ctx->security.corruption_detections,
-        ctx->security.timing_anomalies,
-        ctx->security.concurrent_violations,
-        ctx->security.suspicious_patterns,
-        ctx->security.screenshot_protection_active ? "ACTIVE" : "INACTIVE",
-        ctx->audit_count, ctx->audit_capacity
-    );
-
-    pthread_mutex_unlock(&ctx->context_mutex);
-
-    return (written > 0 && written < buffer_size) ? 
-           VISUALMEM_V2_SUCCESS : VISUALMEM_V2_ERROR_INVALID_PARAMS;
+int visualmem_v2_unlock(visualmem_v2_context_t* ctx) {
+    if (!ctx) return VISUALMEM_V2_ERROR_INVALID_ADDRESS;
+    return pthread_mutex_unlock(&ctx->context_mutex) == 0 ? 
+           VISUALMEM_V2_SUCCESS : VISUALMEM_V2_ERROR_THREAD_FAILED;
 }
