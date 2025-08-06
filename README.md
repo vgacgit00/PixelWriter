@@ -255,3 +255,50 @@ LibVisualMem is released under the MIT License. See [LICENSE](LICENSE) file for 
 **LibVisualMem** - *Transforming pixels into persistent memory*
 
 *"When RAM is not enough, the screen becomes your memory."*
+
+## 📄 Fiche technique Web/Native
+
+| Élément                | Valeur/Exemple                                      |
+|------------------------|-----------------------------------------------------|
+| CPU                    | Intel i7-12700H / Apple M1 / AMD Ryzen 7            |
+| GPU                    | NVIDIA RTX 4090 / Apple M1 GPU / Intel Iris Xe      |
+| RAM                    | 32 GB DDR5                                          |
+| Stockage               | SSD NVMe Gen4 1TB                                   |
+| Navigateur             | Chrome 125 / Edge 124 / Firefox 126                 |
+| WebGPU activé          | Oui / Non                                           |
+| OS                     | Windows 11 / macOS 14 / Ubuntu 24.04                |
+| Moteur de rendu        | WebGL2 / WebGPU / Canvas2D                          |
+| Mémoire GPU dispo      | 24 GB (RTX 4090) / 8 GB (M1)                        |
+| Mode d’accès mémoire   | Direct VRAM / Simulé (ArrayBuffer/Canvas)           |
+| Logger énergétique     | NVML / INA219 / API Battery / estimation logicielle |
+| Script benchmark fourni| benchmark_visualmem.js / perf_hooks                 |
+
+## 🔁 Reproductibilité
+
+1. **Cloner le repo et installer les dépendances**
+2. **Vérifier l’environnement** :
+   - Navigateur compatible WebGPU (chrome://flags/#enable-unsafe-webgpu)
+   - Node.js >= 18 si test Node.js
+   - GPU compatible CUDA/Metal/Vulkan
+3. **Lancer le script de benchmark** :
+   - `node benchmark_visualmem.js --size 16KB --pattern zeros --threads 8`
+   - Ou via navigateur : ouvrir `benchmark_visualmem.html`
+4. **Exporter les résultats** :
+   - JSON, Markdown, ou CSV
+5. **Logger énergétique** :
+   - Si possible, activer NVML/INA219 ou API Battery
+6. **Procédure de validation croisée** :
+   - Comparer les résultats sur plusieurs machines/OS/navigateurs
+   - Publier les logs et scripts pour validation communautaire
+
+## 🧪 Testabilité Node.js/benchmark.js/perf_hooks
+- Utiliser `perf_hooks` pour mesurer latence/bande passante en Node.js
+- Utiliser `benchmark.js` pour micro-benchmarks
+- Fournir un script de test automatisé pour chaque environnement
+
+## 🌐 Conseils pour reproductibilité Web/Node.js/Native
+- Toujours documenter l’environnement d’exécution
+- Préciser la version du navigateur, du moteur WebGPU, et du GPU
+- Fournir les logs de benchmark et la configuration matérielle
+- Utiliser le logger énergétique pour comparer l’efficacité
+- Tester sur au moins 2 navigateurs et 2 OS différents

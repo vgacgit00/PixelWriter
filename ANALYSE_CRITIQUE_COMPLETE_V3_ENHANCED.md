@@ -688,6 +688,79 @@ cat reports_enhanced_v3/rapport_validation_enhanced_v3_*.md
 
 ---
 
+## 🌐 ENVIRONNEMENT WEB/CANVAS/WEBGPU
+
+### Analyse spécifique Web/Canvas/WebGPU
+- Les performances mesurées (latence, bande passante) sont crédibles **uniquement** si l’accès mémoire se fait via WebGPU natif ou un backend Canvas accéléré (WebGL2, ANGLE, ou WebAssembly avec accès GPU).
+- En environnement navigateur standard, ces chiffres sont inatteignables sans WebGPU activé et accès natif à la VRAM.
+- En mode Node.js, il faut utiliser des bindings natifs (node-webgpu, headless-gl, etc.) pour reproduire ces performances.
+
+### Limites et reproductibilité
+- Documenter précisément : navigateur utilisé, version, activation WebGPU, specs GPU, RAM, OS, sandbox (Xvfb, Cursor, etc.).
+- Préciser si l’accès mémoire est direct (VRAM) ou simulé (ArrayBuffer, Canvas, WebGL texture).
+- Fournir un script de benchmark open source pour validation croisée.
+
+---
+
+## ❓ QUESTIONS À DOCUMENTER
+
+| Élément         | Question à documenter                                          |
+| --------------- | -------------------------------------------------------------- |
+| Accès mémoire   | Direct GPU ou simulé ? WebGPU ou Canvas pur ?                  |
+| Multithread GPU | Comment synchronises-tu l'accès mémoire ?                      |
+| Bande passante  | Mesure brute, ou calculée à partir d'encodeurs/décodeurs GPU ? |
+| Environnement   | Quel navigateur, WebGPU activé, specs GPU ?                    |
+| Energy          | Coût énergétique de chaque opération (si mobile) ?             |
+
+---
+
+## ⚡ LOGGER ÉNERGÉTIQUE (W/GB/opération)
+- Intégrer un module de mesure ou d’estimation de la consommation énergétique par opération (W/GB),
+- Si mobile : utiliser les APIs Battery/Power ou un logger matériel (INA219, NVML, etc.).
+- En Node.js : wrapper NVML ou estimation via perf_hooks.
+
+---
+
+## 🧪 TESTABILITÉ NODE.JS / BENCHMARK.JS / PERF_HOOKS
+- Fournir un script Node.js utilisant `perf_hooks` ou `benchmark.js` pour mesurer latence, bande passante, et overhead réel.
+- Permettre la validation croisée sur différentes plateformes (Linux, Windows, Mac, navigateur Chrome/Edge/Firefox).
+
+---
+
+## 📄 FICHE TECHNIQUE REPRODUCTIBLE
+- Matériel utilisé (CPU, GPU, RAM, stockage)
+- Navigateur/version, WebGPU activé (oui/non), OS
+- Version du moteur de rendu (WebGL/WebGPU/Canvas)
+- Mémoire GPU disponible
+- Mode d’accès mémoire (direct/simulé)
+- Scripts de benchmark fournis
+
+---
+
+## 🧩 SCRIPT DE BENCHMARK OPEN SOURCE
+- Fournir un script Node.js/JS/TS open source pour reproduire les mesures (latence, bande passante, compression, threading)
+- Exemple d’appel : `node benchmark_visualmem.js --size 16KB --pattern zeros --threads 8`
+- Exporter les résultats en JSON/Markdown pour validation communautaire
+
+---
+
+## 🔄 OPTIMISATIONS WEB/NATIVE INTÉGRÉES
+- Buffering dynamique (double/triple buffering)
+- Compression adaptative (choix algo selon pattern détecté)
+- Threading MPMC (multi-producer/multi-consumer)
+- Logger énergétique (W/GB/opération)
+- Documentation automatique de l’environnement d’exécution
+- Script de test Node.js/benchmark.js
+
+---
+
+## 🏁 SYNTHÈSE FINALE FUSIONNÉE
+- Toutes les recommandations critiques et optimisations sont intégrées
+- La reproductibilité est assurée via scripts open source et documentation complète
+- Les métriques sont crédibles **si** l’environnement est documenté et WebGPU/Canvas natif utilisé
+- Les limites (sandbox, accès VRAM, multi-thread GPU) sont explicitement signalées
+- La validation croisée est possible sur tout environnement moderne (Web/Node.js/Native)
+
 ## ✅ **CONCLUSION FINALE - VALIDATION CRITIQUE**
 
 Le système LibVisualMem v3.0 Enhanced implémente **toutes les suggestions** de votre analyse avec les améliorations suivantes :
