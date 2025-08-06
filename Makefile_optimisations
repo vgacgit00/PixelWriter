@@ -1,0 +1,111 @@
+# Makefile pour les optimisations LibVisualMem v3.0 Enhanced
+# Basé sur l'analyse critique complète
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99 -pthread
+LDFLAGS = -lm -lpthread
+
+# Cibles principales
+TARGETS = optimisations_implementation test_optimisations benchmark_optimisations
+
+# Répertoires
+BIN_DIR = bin_optimisations
+OBJ_DIR = obj_optimisations
+LOG_DIR = logs_optimisations
+REPORT_DIR = reports_optimisations
+
+# Création des répertoires
+$(shell mkdir -p $(BIN_DIR) $(OBJ_DIR) $(LOG_DIR) $(REPORT_DIR))
+
+# Règles principales
+all: $(TARGETS)
+
+# Compilation des optimisations
+optimisations_implementation: $(OBJ_DIR)/optimisations_implémentation.o
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/$@ $< $(LDFLAGS)
+	@echo "✅ Optimisations compilées avec succès"
+
+# Tests des optimisations
+test_optimisations: $(OBJ_DIR)/test_optimisations.o
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/$@ $< $(LDFLAGS)
+	@echo "✅ Tests d'optimisations compilés"
+
+# Benchmark des optimisations
+benchmark_optimisations: $(OBJ_DIR)/benchmark_optimisations.o
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/$@ $< $(LDFLAGS)
+	@echo "✅ Benchmarks d'optimisations compilés"
+
+# Compilation des objets
+$(OBJ_DIR)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Tests automatiques
+test: all
+	@echo "🧪 Lancement des tests d'optimisations..."
+	@$(BIN_DIR)/test_optimisations > $(LOG_DIR)/test_results.log 2>&1
+	@echo "📊 Résultats des tests sauvegardés dans $(LOG_DIR)/test_results.log"
+
+# Benchmarks automatiques
+benchmark: all
+	@echo "📈 Lancement des benchmarks d'optimisations..."
+	@$(BIN_DIR)/benchmark_optimisations > $(LOG_DIR)/benchmark_results.log 2>&1
+	@echo "📊 Résultats des benchmarks sauvegardés dans $(LOG_DIR)/benchmark_results.log"
+
+# Tests de stress
+stress: all
+	@echo "💪 Lancement des tests de stress..."
+	@$(BIN_DIR)/optimisations_implementation --stress > $(LOG_DIR)/stress_results.log 2>&1
+	@echo "📊 Résultats des tests de stress sauvegardés dans $(LOG_DIR)/stress_results.log"
+
+# Validation complète
+validate: test benchmark stress
+	@echo "🔍 Validation complète des optimisations..."
+	@echo "📋 Génération du rapport de validation..."
+	@./generate_validation_report.sh > $(REPORT_DIR)/validation_report.md
+	@echo "✅ Rapport de validation généré: $(REPORT_DIR)/validation_report.md"
+
+# Nettoyage
+clean:
+	rm -rf $(BIN_DIR) $(OBJ_DIR) $(LOG_DIR)
+	@echo "🧹 Nettoyage effectué"
+
+# Installation des dépendances
+install-deps:
+	@echo "📦 Installation des dépendances..."
+	@sudo apt-get update
+	@sudo apt-get install -y build-essential libpthread-stubs0-dev
+	@echo "✅ Dépendances installées"
+
+# Aide
+help:
+	@echo "LibVisualMem v3.0 Enhanced - Makefile des Optimisations"
+	@echo "====================================================="
+	@echo ""
+	@echo "Cibles disponibles:"
+	@echo "  all          - Compile toutes les optimisations"
+	@echo "  test         - Lance les tests d'optimisations"
+	@echo "  benchmark    - Lance les benchmarks d'optimisations"
+	@echo "  stress       - Lance les tests de stress"
+	@echo "  validate     - Validation complète avec rapport"
+	@echo "  clean        - Nettoie les fichiers générés"
+	@echo "  install-deps - Installe les dépendances"
+	@echo "  help         - Affiche cette aide"
+	@echo ""
+	@echo "Exemples d'utilisation:"
+	@echo "  make all                    # Compilation complète"
+	@echo "  make test                   # Tests uniquement"
+	@echo "  make validate               # Validation complète"
+	@echo "  make clean && make all      # Recompilation propre"
+
+# Règles spéciales
+.PHONY: all test benchmark stress validate clean install-deps help
+
+# Affichage des informations de compilation
+info:
+	@echo "🔧 Informations de compilation:"
+	@echo "  Compilateur: $(CC)"
+	@echo "  Flags: $(CFLAGS)"
+	@echo "  Répertoire binaire: $(BIN_DIR)"
+	@echo "  Répertoire objets: $(OBJ_DIR)"
+	@echo "  Répertoire logs: $(LOG_DIR)"
+	@echo "  Répertoire rapports: $(REPORT_DIR)"
