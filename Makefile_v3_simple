@@ -1,0 +1,65 @@
+# Makefile pour LibVisualMem v3.0 Simple
+# =======================================
+# Compilation de la version 3.0 simple sans affichage X11
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99 -D_GNU_SOURCE
+LDFLAGS = -lX11 -lm -lpthread
+
+# Fichiers sources
+SOURCES = test_validation_simple_v3.c hardware_interface_v3.c
+TARGET = test_validation_simple_v3
+
+# Bibliothèques
+LIBRARIES = libvisualmem_v2.a
+
+# Règles de compilation
+all: $(TARGET)
+
+$(TARGET): $(SOURCES) $(LIBRARIES)
+	$(CC) $(CFLAGS) -o $@ $(SOURCES) $(LIBRARIES) $(LDFLAGS)
+
+# Compilation de la bibliothèque si nécessaire
+libvisualmem_v2.a: libvisualmem_v2.c libvisualmem_v2.h
+	$(CC) $(CFLAGS) -c libvisualmem_v2.c -o libvisualmem_v2.o
+	ar rcs libvisualmem_v2.a libvisualmem_v2.o
+
+# Nettoyage
+clean:
+	rm -f $(TARGET) *.o *.a
+	rm -rf validation_simple_v3_*
+
+# Test rapide
+test: $(TARGET)
+	./$(TARGET)
+
+# Test avec nettoyage automatique
+test-clean: clean all test
+
+# Validation complète
+validate: $(TARGET)
+	@echo "🚀 Démarrage de la validation simple v3.0..."
+	@echo "📁 Création automatique du répertoire de version..."
+	./$(TARGET)
+	@echo "✅ Validation terminée. Consultez le répertoire de version créé."
+
+# Aide
+help:
+	@echo "Makefile LibVisualMem v3.0 Simple"
+	@echo "=================================="
+	@echo ""
+	@echo "Commandes disponibles:"
+	@echo "  make all          - Compile le test de validation simple v3.0"
+	@echo "  make test         - Lance le test de validation"
+	@echo "  make validate     - Lance la validation complète avec versioning"
+	@echo "  make clean        - Nettoie les fichiers compilés"
+	@echo "  make help         - Affiche cette aide"
+	@echo ""
+	@echo "Fonctionnalités v3.0 Simple:"
+	@echo "  ✅ Système de versioning automatique"
+	@echo "  ✅ Benchmarks simples sans affichage"
+	@echo "  ✅ Validation automatique à chaque création"
+	@echo "  ✅ Rapports détaillés en Markdown"
+	@echo "  ✅ Métriques JSON structurées"
+
+.PHONY: all clean test validate test-clean help

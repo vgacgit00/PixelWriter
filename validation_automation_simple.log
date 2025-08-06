@@ -1,0 +1,26 @@
+=== Début de l'automatisation Tue Aug  5 11:02:51 PM UTC 2025 ===
+[0;34m[2025-08-05 23:02:51][0m Vérification des prérequis...
+[0;32m✅ Prérequis vérifiés[0m
+[0;34m[2025-08-05 23:02:51][0m Compilation de la version v3.0-SIMPLE...
+[0;32m✅ Nettoyage effectué[0m
+[0;32m✅ Compilation réussie[0m
+[0;34m[2025-08-05 23:02:51][0m Lancement de la validation complète...
+[0;32m✅ Validation terminée avec succès[0m
+[0;32m✅ Répertoire de version créé: validation_simple_v3_20250805_230251[0m
+[0;34m[2025-08-05 23:02:51][0m Fichiers générés:
+[0;34m[2025-08-05 23:02:51][0m Analyse des résultats...
+[0;36mℹ️  Analyse du répertoire: validation_simple_v3_20250805_230251[0m
+[1;33m⚠️  Fichier de métriques non trouvé[0m
+[1;33m⚠️  Rapport non trouvé[0m
+[1;33m⚠️  Logs non trouvés[0m
+[0;34m[2025-08-05 23:02:51][0m Mise à jour de l'historique...
+[0;32m✅ Historique mis à jour[0m
+[0;34m[2025-08-05 23:02:51][0m Validation de l'intégrité...
+[0;32m✅ Fichier logs_validation_simple_v3_ trouvé[0m
+[0;32m✅ Fichier metrics_validation_simple_v3_ trouvé[0m
+[0;32m✅ Fichier rapport_validation_simple_v3_ trouvé[0m
+[0;32m✅ Fichier logs_validation_simple_v3_20250805_230251.log valide (346 bytes)[0m
+[0;32m✅ Fichier metrics_validation_simple_v3_20250805_230251.json valide (213 bytes)[0m
+[0;32m✅ Fichier rapport_validation_simple_v3_20250805_230251.md valide (876 bytes)[0m
+[0;32m✅ Intégrité validée[0m
+[0;34m[2025-08-05 23:02:53][0m Historique des validations:

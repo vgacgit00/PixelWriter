@@ -1,0 +1,75 @@
+# Makefile pour LibVisualMem v3.0
+# =================================
+# Compilation de la version 3.0 avec système de versioning automatique
+
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99 -D_GNU_SOURCE
+LDFLAGS = -lX11 -lm -lpthread
+
+# Fichiers sources
+SOURCES = test_validation_complete_v3.c hardware_interface_v3.c
+TARGET = test_validation_v3
+
+# Bibliothèques
+LIBRARIES = libvisualmem_v2.a
+
+# Règles de compilation
+all: $(TARGET)
+
+$(TARGET): $(SOURCES) $(LIBRARIES)
+	$(CC) $(CFLAGS) -o $@ $(SOURCES) $(LIBRARIES) $(LDFLAGS)
+
+# Compilation de la bibliothèque si nécessaire
+libvisualmem_v2.a: libvisualmem_v2.c libvisualmem_v2.h
+	$(CC) $(CFLAGS) -c libvisualmem_v2.c -o libvisualmem_v2.o
+	ar rcs libvisualmem_v2.a libvisualmem_v2.o
+
+# Nettoyage
+clean:
+	rm -f $(TARGET) *.o *.a
+	rm -rf validation_v3_*
+
+# Installation des dépendances (Ubuntu/Debian)
+install-deps:
+	sudo apt-get update
+	sudo apt-get install -y libx11-dev libgl1-mesa-dev libjson-c-dev
+
+# Installation des dépendances (CentOS/RHEL)
+install-deps-rhel:
+	sudo yum install -y libX11-devel mesa-libGL-devel json-c-devel
+
+# Test rapide
+test: $(TARGET)
+	./$(TARGET)
+
+# Test avec nettoyage automatique
+test-clean: clean all test
+
+# Validation complète
+validate: $(TARGET)
+	@echo "🚀 Démarrage de la validation complète v3.0..."
+	@echo "📁 Création automatique du répertoire de version..."
+	./$(TARGET)
+	@echo "✅ Validation terminée. Consultez le répertoire de version créé."
+
+# Aide
+help:
+	@echo "Makefile LibVisualMem v3.0"
+	@echo "=========================="
+	@echo ""
+	@echo "Commandes disponibles:"
+	@echo "  make all          - Compile le test de validation v3.0"
+	@echo "  make test         - Lance le test de validation"
+	@echo "  make validate     - Lance la validation complète avec versioning"
+	@echo "  make clean        - Nettoie les fichiers compilés"
+	@echo "  make install-deps - Installe les dépendances (Ubuntu/Debian)"
+	@echo "  make help         - Affiche cette aide"
+	@echo ""
+	@echo "Fonctionnalités v3.0:"
+	@echo "  ✅ Système de versioning automatique"
+	@echo "  ✅ Benchmarks complets sans omission"
+	@echo "  ✅ Validation automatique à chaque création"
+	@echo "  ✅ Rapports détaillés en Markdown"
+	@echo "  ✅ Métriques JSON structurées"
+
+.PHONY: all clean test validate install-deps install-deps-rhel test-clean help
